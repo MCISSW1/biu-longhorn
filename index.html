@@ -156,6 +156,36 @@
   .exp-equip-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; display: grid; grid-template-columns: 1fr 80px auto auto; gap: 10px; align-items: center; }
   .exp-equip-name { font-size: 14px; font-weight: 500; }
   .exp-equip-cost { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-muted); }
+
+  /* ── Reports ── */
+  .rep-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .rep-form-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  .rep-output { display: none; }
+  .rep-output.visible { display: block; }
+  .rep-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
+  .rep-title { font-size: 18px; font-weight: 600; }
+  .rep-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .rep-summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 1.5rem; }
+  .rep-section { margin-bottom: 1.75rem; }
+  .rep-section-title { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; font-family: var(--mono); margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .rep-week-block { margin-bottom: 1.25rem; }
+  .rep-week-label { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .rep-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rep-table th { text-align: left; font-size: 11px; font-family: var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .rep-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  .rep-table tr:last-child td { border-bottom: none; }
+  .rep-table .num { font-family: var(--mono); text-align: right; }
+  .rep-table .subtotal td { font-weight: 600; background: var(--surface2); }
+  .rep-grand { background: var(--accent-bg); color: var(--accent-text); border-radius: var(--radius); padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+  .rep-grand-label { font-size: 13px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; }
+  .rep-grand-value { font-size: 22px; font-weight: 600; font-family: var(--mono); }
+  @media print {
+    .topbar, .sidebar, nav, .rep-form, .btn, .btn-icon, #nav-reports { display: none !important; }
+    .layout { grid-template-columns: 1fr !important; }
+    .rep-output { display: block !important; }
+    body { background: white; }
+    .rep-grand { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
   /* modal */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(20,18,14,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
   .modal-backdrop.open { opacity: 1; pointer-events: all; }
@@ -218,6 +248,9 @@
       </button>
       <button class="nav-item" id="nav-expenses" onclick="switchTab('expenses')">
         <span class="nav-icon">$</span> Expenses
+      </button>
+      <button class="nav-item" id="nav-reports" onclick="switchTab('reports')">
+        <span class="nav-icon">⎙</span> Reports
       </button>
     </nav>
 
@@ -308,6 +341,48 @@
           <button class="btn primary" onclick="openEquipModal()">+ Add equipment</button>
         </div>
         <div class="exp-equip-list" id="exp-equip-list"></div>
+      </div>
+
+
+      <!-- REPORTS -->
+      <div id="screen-reports" class="screen">
+        <div class="page-header">
+          <div><h1>Reports</h1><p>Generate expense reports by date range</p></div>
+        </div>
+        <div class="rep-form">
+          <div class="rep-form-row">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Project</label>
+              <select id="rep-project-select">
+                <option value="all">All projects</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Start date</label>
+              <input type="date" id="rep-start" />
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label>End date</label>
+              <input type="date" id="rep-end" />
+            </div>
+            <button class="btn primary" onclick="generateReport()" style="height:40px;align-self:end;">Generate</button>
+          </div>
+        </div>
+        <div class="rep-output" id="rep-output">
+          <div class="rep-header">
+            <div>
+              <div class="rep-title" id="rep-title"></div>
+              <div class="rep-subtitle" id="rep-subtitle"></div>
+            </div>
+            <button class="btn" onclick="window.print()">⎙ Export PDF</button>
+          </div>
+          <div class="rep-summary-grid">
+            <div class="metric"><div class="metric-label">Total labor</div><div class="metric-value" id="rep-stat-labor">$0.00</div></div>
+            <div class="metric"><div class="metric-label">Equipment</div><div class="metric-value" id="rep-stat-equip">$0.00</div></div>
+            <div class="metric"><div class="metric-label">Grand total</div><div class="metric-value" id="rep-stat-grand">$0.00</div></div>
+          </div>
+          <div id="rep-body"></div>
+        </div>
       </div>
 
       <!-- DETAIL -->
@@ -477,7 +552,7 @@ function toast(msg, isError) {
 }
 
 // ── Tab switching ──
-const TABS = ['projects','calendar','gantt','alerts','expenses'];
+const TABS = ['projects','calendar','gantt','alerts','expenses','reports'];
 function switchTab(tab) {
   activeTab = tab;
   TABS.forEach(t => {
@@ -491,6 +566,7 @@ function switchTab(tab) {
   else if (tab === 'calendar') renderCalendar();
   else if (tab === 'gantt') renderGantt();
   else if (tab === 'expenses') renderExpenses();
+  else if (tab === 'reports') renderReportsTab();
   else renderAlerts();
 }
 
@@ -759,7 +835,7 @@ async function deleteCurrentProject() {
 }
 
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){document.getElementById('modal-project').classList.remove('open');document.getElementById('modal-delivery').classList.remove('open');document.getElementById('modal-cal-delivery').classList.remove('open');document.getElementById('modal-activity').classList.remove('open');document.getElementById('modal-equip').classList.remove('open');}
+  if(e.key==='Escape'){document.getElementById('modal-project').classList.remove('open');document.getElementById('modal-delivery').classList.remove('open');document.getElementById('modal-cal-delivery').classList.remove('open');document.getElementById('modal-activity').classList.remove('open');document.getElementById('modal-equip').classList.remove('open'); document.getElementById('rep-output').classList.remove('visible');}
 });
 
 
@@ -1182,6 +1258,192 @@ async function deleteEquipment(id) {
   const { error } = await sb.from('equipment_rentals').delete().eq('id', id);
   if (error) { toast('Error deleting', true); return; }
   toast('Equipment removed'); await loadAndRenderExpenses();
+}
+
+
+// ── Reports ──
+async function renderReportsTab() {
+  // populate project select
+  if (!projectsCache.length) {
+    const { data: projs } = await sb.from('projects').select('*').order('created_at',{ascending:true});
+    projectsCache = projs || [];
+    projs.forEach(p => projectMapCache[p.id] = p.name);
+  }
+  const sel = document.getElementById('rep-project-select');
+  sel.innerHTML = '<option value="all">All projects</option>' +
+    projectsCache.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+  // default date range: current month
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  document.getElementById('rep-start').value = dateToStr(new Date(y, m, 1));
+  document.getElementById('rep-end').value = dateToStr(new Date(y, m+1, 0));
+}
+
+async function generateReport() {
+  const projectVal = document.getElementById('rep-project-select').value;
+  const startStr = document.getElementById('rep-start').value;
+  const endStr = document.getElementById('rep-end').value;
+  if (!startStr || !endStr) { toast('Please select a date range', true); return; }
+  if (endStr < startStr) { toast('End date must be after start date', true); return; }
+
+  const projectIds = projectVal === 'all' ? projectsCache.map(p => p.id) : [projectVal];
+  const projectLabel = projectVal === 'all' ? 'All Projects' : projectMapCache[projectVal];
+
+  // fetch labor logs
+  let laborQuery = sb.from('labor_logs').select('*').gte('log_date', startStr).lte('log_date', endStr);
+  if (projectVal !== 'all') laborQuery = laborQuery.eq('project_id', projectVal);
+  const { data: logs } = await laborQuery.order('log_date', {ascending:true});
+
+  // fetch equipment
+  let equipQuery = sb.from('equipment_rentals').select('*');
+  if (projectVal !== 'all') equipQuery = equipQuery.eq('project_id', projectVal);
+  const { data: equips } = await equipQuery.order('project_id', {ascending:true});
+
+  const allLogs = logs || [];
+  const allEquips = equips || [];
+
+  // set header
+  document.getElementById('rep-title').textContent = `Expense Report — ${projectLabel}`;
+  document.getElementById('rep-subtitle').textContent = `${fmtDate(startStr)} to ${fmtDate(endStr)}`;
+
+  // ── Build labor section grouped by project then week ──
+  const logsByProject = {};
+  allLogs.forEach(l => {
+    if (!logsByProject[l.project_id]) logsByProject[l.project_id] = [];
+    logsByProject[l.project_id].push(l);
+  });
+
+  let totalLabor = 0;
+  let laborHtml = '';
+
+  const projectsToShow = projectVal === 'all' ? projectsCache : projectsCache.filter(p => p.id === projectVal);
+
+  projectsToShow.forEach(proj => {
+    const projLogs = (logsByProject[proj.id] || []).filter(l => {
+      const d = strToDate(l.log_date);
+      return l.installers > 0 || l.avg_pay > 0;
+    });
+    if (!projLogs.length && projectVal !== 'all') return;
+
+    if (projectVal === 'all') {
+      laborHtml += `<div style="font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--text-muted);">${proj.name}</div>`;
+    }
+
+    if (!projLogs.length) {
+      laborHtml += `<div style="font-size:13px;color:var(--text-faint);padding:6px 0 10px;">No labor logged for this period.</div>`;
+      return;
+    }
+
+    // group by week (Sat–Fri)
+    const weekMap = {};
+    projLogs.forEach(l => {
+      const d = strToDate(l.log_date);
+      const dayOfWeek = d.getDay();
+      const daysFromSat = (dayOfWeek + 1) % 7;
+      const weekSat = new Date(d); weekSat.setDate(d.getDate() - daysFromSat);
+      const weekKey = dateToStr(weekSat);
+      if (!weekMap[weekKey]) weekMap[weekKey] = [];
+      weekMap[weekKey].push(l);
+    });
+
+    Object.keys(weekMap).sort().forEach(weekKey => {
+      const weekLogs = weekMap[weekKey];
+      const weekEnd = new Date(strToDate(weekKey)); weekEnd.setDate(weekEnd.getDate() + 6);
+      let weekTotal = 0;
+
+      let rows = weekLogs.map(l => {
+        const dayTotal = (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0);
+        weekTotal += dayTotal;
+        totalLabor += dayTotal;
+        const d = strToDate(l.log_date);
+        return `<tr>
+          <td>${DAY_NAMES[d.getDay()].slice(0,3)}, ${fmtDate(l.log_date)}</td>
+          <td class="num">${l.installers||0}</td>
+          <td class="num">${fmtCost(l.avg_pay||0)}/hr</td>
+          <td class="num">${l.hours_worked||0} hrs</td>
+          <td class="num">${fmtCost(dayTotal)}</td>
+        </tr>`;
+      }).join('');
+
+      laborHtml += `<div class="rep-week-block">
+        <div class="rep-week-label">Week of ${fmtDate(weekKey)} – ${fmtDate(dateToStr(weekEnd))}</div>
+        <table class="rep-table">
+          <thead><tr>
+            <th>Day</th><th class="num">Installers</th><th class="num">Rate</th><th class="num">Hours</th><th class="num">Total</th>
+          </tr></thead>
+          <tbody>${rows}
+            <tr class="subtotal"><td colspan="4">Week subtotal</td><td class="num">${fmtCost(weekTotal)}</td></tr>
+          </tbody>
+        </table>
+      </div>`;
+    });
+  });
+
+  // ── Equipment section ──
+  let totalEquip = 0;
+  let equipHtml = '';
+
+  if (allEquips.length) {
+    const equipByProject = {};
+    allEquips.forEach(e => {
+      if (!equipByProject[e.project_id]) equipByProject[e.project_id] = [];
+      equipByProject[e.project_id].push(e);
+    });
+
+    projectsToShow.forEach(proj => {
+      const projEquips = equipByProject[proj.id] || [];
+      if (!projEquips.length) return;
+
+      if (projectVal === 'all') {
+        equipHtml += `<div style="font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--text-muted);">${proj.name}</div>`;
+      }
+
+      let rows = projEquips.map(e => {
+        const qty = e.quantity || 1;
+        const cost = qty * Number(e.monthly_cost);
+        totalEquip += cost;
+        return `<tr>
+          <td>${e.name}</td>
+          <td class="num">×${qty}</td>
+          <td class="num">${fmtCost(e.monthly_cost)}/mo</td>
+          <td class="num">${fmtCost(cost)}/mo</td>
+        </tr>`;
+      }).join('');
+
+      equipHtml += `<table class="rep-table" style="margin-bottom:10px;">
+        <thead><tr><th>Equipment</th><th class="num">Qty</th><th class="num">Unit cost</th><th class="num">Total/mo</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    });
+  } else {
+    equipHtml = `<div style="font-size:13px;color:var(--text-faint);padding:6px 0;">No equipment rentals on record.</div>`;
+  }
+
+  const grandTotal = totalLabor + totalEquip;
+
+  // update summary metrics
+  document.getElementById('rep-stat-labor').textContent = fmtCost(totalLabor);
+  document.getElementById('rep-stat-equip').textContent = fmtCost(totalEquip);
+  document.getElementById('rep-stat-grand').textContent = fmtCost(grandTotal);
+
+  // build full body
+  document.getElementById('rep-body').innerHTML = `
+    <div class="rep-section">
+      <div class="rep-section-title">Labor breakdown</div>
+      ${laborHtml || '<div style="font-size:13px;color:var(--text-faint);">No labor logged for this period.</div>'}
+    </div>
+    <div class="rep-section">
+      <div class="rep-section-title">Equipment rentals</div>
+      ${equipHtml}
+    </div>
+    <div class="rep-grand">
+      <div class="rep-grand-label">Grand total</div>
+      <div class="rep-grand-value">${fmtCost(grandTotal)}</div>
+    </div>
+  `;
+
+  document.getElementById('rep-output').classList.add('visible');
 }
 
 const PASS_KEY = 'dt_auth';
