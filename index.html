@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BIU Longhorn</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #F5F3EE; --surface: #FFFFFF; --surface2: #EFEDE8;
+    --border: #DDD9D0; --border-strong: #C5BFB3;
+    --text: #1A1814; --text-muted: #6B6660; --text-faint: #9B9590;
+    --accent-bg: #1A1814; --accent-text: #F5F3EE;
+    --green-bg: #E6F2E8; --green-text: #2D6B38;
+    --amber-bg: #FDF0DC; --amber-text: #8A5A0A;
+    --blue-bg: #E4EEF9; --blue-text: #1D4F8A;
+    --red-bg: #FBEAEA; --red-text: #8A2020;
+    --orange-bg: #FEF0E6; --orange-text: #9A4A0F;
+    --radius: 10px; --radius-sm: 6px;
+    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+  }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.5; }
+  .app { max-width: 820px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+  .logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .logo span { color: var(--text); }
+  .layout { display: grid; grid-template-columns: 160px 1fr; gap: 24px; align-items: start; }
+  .sidebar { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 2rem; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-muted); transition: background 0.12s, color 0.12s; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; }
+  .nav-badge { margin-left: auto; background: var(--orange-bg); color: var(--orange-text); font-family: var(--mono); font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 10px; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; }
+  .page-header h1 { font-size: 20px; font-weight: 600; }
+  .page-header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: background 0.12s, border-color 0.12s; white-space: nowrap; }
+  .btn:hover { background: var(--surface2); border-color: var(--border-strong); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent-bg); }
+  .btn.primary:hover { opacity: 0.88; }
+  .btn.ghost { border: none; background: none; color: var(--text-muted); padding: 8px 10px; }
+  .btn.ghost:hover { color: var(--text); background: var(--surface2); }
+  .btn.danger { background: var(--red-bg); color: var(--red-text); border-color: transparent; }
+  .btn-icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 15px; color: var(--text-muted); transition: background 0.12s; }
+  .btn-icon:hover { background: var(--surface2); color: var(--text); }
+  .project-list { display: flex; flex-direction: column; gap: 8px; }
+  .project-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; }
+  .project-card:hover { border-color: var(--border-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .project-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .project-info { flex: 1; min-width: 0; }
+  .project-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .project-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .project-actions { display: flex; gap: 6px; align-items: center; }
+  .badge { font-family: var(--mono); font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+  .badge.active    { background: var(--green-bg); color: var(--green-text); }
+  .badge.pending   { background: var(--amber-bg); color: var(--amber-text); }
+  .badge.complete  { background: var(--blue-bg);  color: var(--blue-text); }
+  .badge.scheduled { background: var(--blue-bg);  color: var(--blue-text); }
+  .badge.transit   { background: var(--amber-bg); color: var(--amber-text); }
+  .badge.delivered { background: var(--green-bg); color: var(--green-text); }
+  .back-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .back-row .project-title { font-size: 18px; font-weight: 600; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 1.5rem; }
+  .metric { background: var(--surface2); border-radius: var(--radius-sm); padding: 0.8rem 1rem; }
+  .metric-label { font-size: 11px; color: var(--text-muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .metric-value { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-title { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; font-family: var(--mono); }
+  .delivery-list { display: flex; flex-direction: column; gap: 6px; }
+  .delivery-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1.1rem; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+  .delivery-date { font-family: var(--mono); font-size: 12px; color: var(--text-muted); margin-bottom: 3px; }
+  .delivery-desc { font-size: 14px; font-weight: 500; }
+  .delivery-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .delivery-cost { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+  .delivery-actions { display: flex; gap: 4px; }
+  .alert-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; border-left: 3px solid #E8A04A; }
+  .alert-project { font-size: 11px; font-family: var(--mono); color: var(--text-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .alert-desc { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .alert-date { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+  .alert-right { text-align: right; }
+  .alert-cost { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text); }
+  .alert-weeks { font-size: 11px; color: var(--orange-text); font-family: var(--mono); margin-top: 4px; }
+  .alert-list { display: flex; flex-direction: column; gap: 8px; }
+  .alert-summary { background: var(--orange-bg); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 10px; }
+  .alert-summary-text { font-size: 13px; color: var(--orange-text); }
+  .alert-summary-text strong { font-weight: 600; }
+  .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-faint); font-size: 14px; }
+  .loading-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-faint); font-size: 14px; font-family: var(--mono); }
+
+  /* ── Calendar ── */
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+  .cal-month { font-size: 16px; font-weight: 600; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .cal-dow { background: var(--surface2); text-align: center; font-size: 11px; font-weight: 500; color: var(--text-muted); font-family: var(--mono); padding: 8px 0; text-transform: uppercase; letter-spacing: 0.05em; }
+  .cal-day { background: var(--surface); min-height: 72px; padding: 6px; position: relative; vertical-align: top; }
+  .cal-day.other-month { background: var(--surface2); }
+  .cal-day.today .cal-day-num { background: var(--accent-bg); color: var(--accent-text); border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+  .cal-day-num { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+  .cal-pip { font-size: 11px; font-weight: 500; padding: 2px 5px; border-radius: 3px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; line-height: 1.3; transition: opacity 0.1s; }
+  .cal-pip:hover { opacity: 0.72; }
+  .cal-pip.scheduled { background: var(--blue-bg); color: var(--blue-text); }
+  .cal-pip.transit   { background: var(--amber-bg); color: var(--amber-text); }
+  .cal-pip.delivered { background: var(--green-bg); color: var(--green-text); }
+  .cal-more { font-size: 10px; color: var(--text-faint); font-family: var(--mono); padding: 1px 4px; }
+  .cal-legend { display: flex; gap: 14px; margin-top: 12px; }
+  .cal-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); }
+  .cal-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+
+  /* ── Gantt ── */
+  .gantt-wrapper { overflow-x: auto; }
+  .gantt-table { min-width: 700px; width: 100%; border-collapse: collapse; }
+  .gantt-project-row td { background: var(--surface2); font-size: 13px; font-weight: 600; color: var(--text); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .gantt-activity-row td { background: var(--surface); border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .gantt-label { font-size: 13px; padding: 6px 10px; white-space: nowrap; min-width: 160px; max-width: 200px; }
+  .gantt-label-name { font-weight: 500; color: var(--text); }
+  .gantt-label-status { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  .gantt-bar-cell { padding: 5px 4px; position: relative; }
+  .gantt-bar { height: 18px; border-radius: 3px; position: absolute; top: 50%; transform: translateY(-50%); min-width: 4px; cursor: pointer; transition: opacity 0.1s; }
+  .gantt-bar:hover { opacity: 0.78; }
+  .gantt-bar.planned    { background: #B5D4F4; }
+  .gantt-bar.in-progress { background: #FAC775; }
+  .gantt-bar.complete   { background: #C0DD97; }
+  .gantt-header-row th { background: var(--surface2); font-size: 10px; font-weight: 500; color: var(--text-muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: center; white-space: nowrap; }
+  .gantt-header-label { min-width: 160px; max-width: 200px; text-align: left; padding-left: 10px; }
+  .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #E24B4A; opacity: 0.6; pointer-events: none; z-index: 2; }
+  .gantt-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .gantt-range-label { font-size: 14px; font-weight: 600; flex: 1; }
+  .gantt-legend { display: flex; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+  .gantt-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); }
+  .gantt-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .gantt-actions { display: flex; gap: 4px; padding: 0 6px; }
+
+  /* ── Expenses ── */
+  .exp-project-select { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .exp-project-select label { margin: 0; text-transform: none; font-size: 14px; font-weight: 500; font-family: var(--sans); letter-spacing: 0; color: var(--text); }
+  .exp-project-select select { width: auto; flex: 1; min-width: 180px; }
+  .exp-week-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 1.25rem; }
+  .exp-week-label { font-size: 15px; font-weight: 600; flex: 1; }
+  .exp-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 1.5rem; }
+  .exp-section-title { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; font-family: var(--mono); margin-bottom: 10px; }
+  .exp-day-grid { display: flex; flex-direction: column; gap: 6px; margin-bottom: 1.5rem; }
+  .exp-day-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; display: grid; grid-template-columns: 90px 1fr 1fr 1fr auto; gap: 10px; align-items: center; }
+  .exp-day-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .exp-day-date { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  .exp-day-input { font-family: var(--sans); font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); outline: none; width: 100%; transition: border-color 0.12s; }
+  .exp-day-input:focus { border-color: var(--text); }
+  .exp-day-total { font-family: var(--mono); font-size: 13px; font-weight: 500; text-align: right; white-space: nowrap; min-width: 70px; }
+  .exp-day-row.today-row { border-color: var(--border-strong); background: var(--surface); box-shadow: inset 3px 0 0 var(--accent-bg); }
+  .exp-equip-list { display: flex; flex-direction: column; gap: 6px; }
+  .exp-equip-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; display: grid; grid-template-columns: 1fr 80px auto auto; gap: 10px; align-items: center; }
+  .exp-equip-name { font-size: 14px; font-weight: 500; }
+  .exp-equip-cost { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-muted); }
+  /* modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(20,18,14,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); width: 100%; max-width: 460px; padding: 1.5rem; transform: translateY(8px); transition: transform 0.15s; }
+  .modal-backdrop.open .modal { transform: translateY(0); }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 1.25rem; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.25rem; }
+  .form-group { margin-bottom: 1rem; }
+  label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
+  input, select { width: 100%; font-family: var(--sans); font-size: 14px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); outline: none; transition: border-color 0.12s; }
+  input:focus, select:focus { border-color: var(--text); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--accent-bg); color: var(--accent-text); font-size: 13px; padding: 10px 16px; border-radius: var(--radius-sm); font-family: var(--mono); opacity: 0; transform: translateY(6px); transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 200; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--red-bg); color: var(--red-text); }
+
+  @media (max-width: 580px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { flex-direction: row; position: static; }
+    .nav-item { flex: 1; justify-content: center; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+    .cal-day { min-height: 52px; }
+    .cal-pip { display: none; }
+    .cal-day.has-delivery::after { content: ''; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--blue-text); margin: 2px auto 0; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo">BIU <span>LONGHORN</span></div>
+  </div>
+
+  <div id="password-gate" style="display:none;min-height:60vh;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;width:100%;max-width:340px;">
+    <div style="font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1.5rem;">BIU <span style="color:var(--text);">LONGHORN</span></div>
+    <p style="font-size:15px;font-weight:600;margin-bottom:0.5rem;">Team access only</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem;">Enter your team password to continue.</p>
+    <input type="password" id="gate-input" placeholder="Password" style="margin-bottom:10px;" />
+    <p id="gate-error" style="display:none;font-size:12px;color:var(--red-text);margin-bottom:10px;font-family:var(--mono);">Incorrect password — try again.</p>
+    <button class="btn primary" style="width:100%;justify-content:center;" onclick="submitPassword()">Unlock</button>
+  </div>
+</div>
+
+<div id="layout-main" class="layout" style="display:none;">
+    <nav class="sidebar">
+      <button class="nav-item active" id="nav-projects" onclick="switchTab('projects')">
+        <span class="nav-icon">▤</span> Projects
+      </button>
+      <button class="nav-item" id="nav-calendar" onclick="switchTab('calendar')">
+        <span class="nav-icon">▦</span> Calendar
+      </button>
+      <button class="nav-item" id="nav-gantt" onclick="switchTab('gantt')">
+        <span class="nav-icon">▬</span> Gantt
+      </button>
+      <button class="nav-item" id="nav-alerts" onclick="switchTab('alerts')">
+        <span class="nav-icon">◎</span> Alerts
+        <span class="nav-badge" id="alert-badge" style="display:none;">0</span>
+      </button>
+      <button class="nav-item" id="nav-expenses" onclick="switchTab('expenses')">
+        <span class="nav-icon">$</span> Expenses
+      </button>
+    </nav>
+
+    <div style="min-width:0;">
+
+      <!-- PROJECTS -->
+      <div id="screen-projects" class="screen active">
+        <div class="page-header">
+          <div><h1>Projects</h1><p id="project-count">Loading…</p></div>
+          <button class="btn primary" onclick="openProjectModal()">+ New project</button>
+        </div>
+        <div class="project-list" id="project-list"><div class="loading-state">Connecting to database…</div></div>
+      </div>
+
+      <!-- CALENDAR -->
+      <div id="screen-calendar" class="screen">
+        <div class="page-header">
+          <div><h1>Calendar</h1><p>All deliveries across projects</p></div>
+        </div>
+        <div class="cal-nav">
+          <button class="btn" onclick="calPrev()">← Prev</button>
+          <span class="cal-month" id="cal-month-label"></span>
+          <button class="btn" onclick="calNext()">Next →</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend">
+          <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#B5D4F4;"></div> Scheduled</div>
+          <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#FAC775;"></div> In transit</div>
+          <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#C0DD97;"></div> Delivered</div>
+        </div>
+      </div>
+
+
+      <!-- GANTT -->
+      <div id="screen-gantt" class="screen">
+        <div class="page-header">
+          <div><h1>Gantt</h1><p>Activity schedule across all projects</p></div>
+        </div>
+        <div class="gantt-controls">
+          <button class="btn" onclick="ganttPrev()">← Prev</button>
+          <span class="gantt-range-label" id="gantt-range-label"></span>
+          <button class="btn" onclick="ganttNext()">Next →</button>
+          <button class="btn primary" onclick="openActivityModal()">+ Add activity</button>
+        </div>
+        <div class="gantt-wrapper">
+          <table class="gantt-table" id="gantt-table"></table>
+        </div>
+        <div class="gantt-legend">
+          <div class="gantt-legend-item"><div class="gantt-legend-dot" style="background:#B5D4F4;"></div> Planned</div>
+          <div class="gantt-legend-item"><div class="gantt-legend-dot" style="background:#FAC775;"></div> In progress</div>
+          <div class="gantt-legend-item"><div class="gantt-legend-dot" style="background:#C0DD97;"></div> Complete</div>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div id="screen-alerts" class="screen">
+        <div class="page-header">
+          <div><h1>Alerts</h1><p>Deliveries arriving within the next 4 weeks</p></div>
+        </div>
+        <div id="alerts-summary"></div>
+        <div class="alert-list" id="alert-list"><div class="loading-state">Loading…</div></div>
+      </div>
+
+
+      <!-- EXPENSES -->
+      <div id="screen-expenses" class="screen">
+        <div class="page-header">
+          <div><h1>Expenses</h1><p>Weekly labor &amp; equipment costs by project</p></div>
+        </div>
+        <div class="exp-project-select">
+          <label>Project:</label>
+          <select id="exp-project-select" onchange="onExpProjectChange()"></select>
+        </div>
+        <div class="exp-week-nav">
+          <button class="btn" onclick="expWeekPrev()">← Prev</button>
+          <span class="exp-week-label" id="exp-week-label"></span>
+          <button class="btn" onclick="expWeekNext()">Next →</button>
+        </div>
+        <div class="exp-summary">
+          <div class="metric"><div class="metric-label">Labor this week</div><div class="metric-value" id="exp-stat-labor">$0.00</div></div>
+          <div class="metric"><div class="metric-label">Equipment / mo</div><div class="metric-value" id="exp-stat-equip">$0.00</div></div>
+          <div class="metric"><div class="metric-label">Total this month</div><div class="metric-value" id="exp-stat-total">$0.00</div></div>
+        </div>
+        <div class="exp-section-title">Labor — daily installer log</div>
+        <div class="exp-day-grid" id="exp-day-grid"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div class="exp-section-title" style="margin-bottom:0;">Equipment rentals</div>
+          <button class="btn primary" onclick="openEquipModal()">+ Add equipment</button>
+        </div>
+        <div class="exp-equip-list" id="exp-equip-list"></div>
+      </div>
+
+      <!-- DETAIL -->
+      <div id="screen-detail" class="screen">
+        <div class="back-row">
+          <button class="btn ghost" onclick="goBack()">← Back</button>
+          <span class="project-title" id="detail-name"></span>
+          <div style="margin-left:auto;display:flex;gap:6px;">
+            <button class="btn" onclick="editCurrentProject()">Edit</button>
+            <button class="btn danger" onclick="deleteCurrentProject()">Delete</button>
+          </div>
+        </div>
+        <div class="summary-grid">
+          <div class="metric"><div class="metric-label">Deliveries</div><div class="metric-value" id="stat-count">0</div></div>
+          <div class="metric"><div class="metric-label">Total cost</div><div class="metric-value" id="stat-cost">$0</div></div>
+          <div class="metric"><div class="metric-label">Status</div><div class="metric-value" id="stat-status" style="font-size:14px;padding-top:4px;"></div></div>
+        </div>
+        <div class="section-header">
+          <span class="section-title">Deliveries</span>
+          <button class="btn primary" onclick="openDeliveryModal()">+ Add delivery</button>
+        </div>
+        <div class="delivery-list" id="delivery-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- PROJECT MODAL -->
+<div class="modal-backdrop" id="modal-project" onclick="closeProjectModal(event)">
+  <div class="modal">
+    <div class="modal-title" id="project-modal-title">New project</div>
+    <div class="form-group"><label>Project name</label><input type="text" id="pf-name" placeholder="e.g. Riverside Apartment Complex" /></div>
+    <div class="form-group"><label>Client</label><input type="text" id="pf-client" placeholder="e.g. Meridian Developers" /></div>
+    <div class="form-group"><label>Status</label>
+      <select id="pf-status"><option value="active">Active</option><option value="pending">Pending</option><option value="complete">Complete</option></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeProjectModal()">Cancel</button>
+      <button class="btn primary" id="save-project-btn" onclick="saveProject()">Save project</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELIVERY MODAL -->
+<div class="modal-backdrop" id="modal-delivery" onclick="closeDeliveryModal(event)">
+  <div class="modal">
+    <div class="modal-title" id="delivery-modal-title">Add delivery</div>
+    <div class="form-group"><label>Description</label><input type="text" id="df-desc" placeholder="e.g. Concrete mix — foundation pour" /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Scheduled date</label><input type="date" id="df-date" /></div>
+      <div class="form-group"><label>Material cost ($)</label><input type="number" id="df-cost" placeholder="0" min="0" step="0.01" /></div>
+    </div>
+    <div class="form-group"><label>Status</label>
+      <select id="df-status"><option value="scheduled">Scheduled</option><option value="transit">In transit</option><option value="delivered">Delivered</option></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeDeliveryModal()">Cancel</button>
+      <button class="btn primary" id="save-delivery-btn" onclick="saveDelivery()">Save delivery</button>
+    </div>
+  </div>
+</div>
+
+<!-- EQUIPMENT MODAL -->
+<div class="modal-backdrop" id="modal-equip" onclick="closeEquipModal(event)">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title" id="equip-modal-title">Add equipment</div>
+    <div class="form-group"><label>Equipment name</label><input type="text" id="ef-name" placeholder="e.g. Scissor lift, Excavator" /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Monthly rental cost ($)</label><input type="number" id="ef-cost" placeholder="0" min="0" step="0.01" /></div>
+      <div class="form-group"><label>Quantity</label><input type="number" id="ef-qty" placeholder="1" min="1" step="1" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeEquipModal()">Cancel</button>
+      <button class="btn primary" id="save-equip-btn" onclick="saveEquipment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACTIVITY MODAL -->
+<div class="modal-backdrop" id="modal-activity" onclick="closeActivityModal(event)">
+  <div class="modal">
+    <div class="modal-title" id="activity-modal-title">Add activity</div>
+    <div class="form-group"><label>Project</label>
+      <select id="af-project"></select>
+    </div>
+    <div class="form-group"><label>Activity name</label><input type="text" id="af-name" placeholder="e.g. Excavation, Framing, Electrical" /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Start date</label><input type="date" id="af-start" /></div>
+      <div class="form-group"><label>End date</label><input type="date" id="af-end" /></div>
+    </div>
+    <div class="form-group"><label>Status</label>
+      <select id="af-status">
+        <option value="planned">Planned</option>
+        <option value="in-progress">In progress</option>
+        <option value="complete">Complete</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeActivityModal()">Cancel</button>
+      <button class="btn primary" id="save-activity-btn" onclick="saveActivity()">Save activity</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR DELIVERY DETAIL MODAL -->
+<div class="modal-backdrop" id="modal-cal-delivery" onclick="closeCalDeliveryModal(event)">
+  <div class="modal" style="max-width:400px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.25rem;">
+      <div class="modal-title" style="margin-bottom:0;" id="cal-del-title"></div>
+      <button class="btn-icon" onclick="closeCalDeliveryModal()" style="flex-shrink:0;margin-left:12px;">&#x2715;</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text-muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Project</span>
+        <span style="font-size:14px;font-weight:500;" id="cal-del-project"></span>
+      </div>
+      <div style="border-top:1px solid var(--border);"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text-muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Date</span>
+        <span style="font-size:14px;font-family:var(--mono);" id="cal-del-date"></span>
+      </div>
+      <div style="border-top:1px solid var(--border);"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text-muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Cost</span>
+        <span style="font-size:16px;font-weight:600;font-family:var(--mono);" id="cal-del-cost"></span>
+      </div>
+      <div style="border-top:1px solid var(--border);"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text-muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Status</span>
+        <span id="cal-del-status"></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeCalDeliveryModal()">Close</button>
+      <button class="btn primary" id="cal-del-goto-btn">Go to project &#x2192;</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dzesbfqwfjdrdmrjdttr.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6ZXNiZnF3ZmpkcmRtcmpkdHRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDMyODAsImV4cCI6MjA4ODkxOTI4MH0.M7wzODDdAgqZ50Arf09KmyFA-nkDRw-Uh1TareBYkWc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const dotColor = { active: '#2D6B38', pending: '#8A5A0A', complete: '#1D4F8A' };
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+let currentProjectId = null, editingProjectId = null, editingDeliveryId = null;
+let projectsCache = [], deliveriesCache = [], allDeliveriesCache = [], projectMapCache = {};
+let activeTab = 'projects', previousTab = 'projects';
+let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
+
+function fmtCost(n) { return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtDate(d) { if (!d) return '—'; const [y,m,day]=d.split('-'); return `${MONTHS[+m-1].slice(0,3)} ${+day}, ${y}`; }
+function cap(s) { return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
+function weeksFromNow(dateStr) { if (!dateStr) return null; const now=new Date(); now.setHours(0,0,0,0); const d=new Date(dateStr+'T00:00:00'); return Math.floor((d-now)/(7*24*60*60*1000)); }
+
+function toast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'toast show'+(isError?' error':'');
+  setTimeout(() => el.className='toast', 2400);
+}
+
+// ── Tab switching ──
+const TABS = ['projects','calendar','gantt','alerts','expenses'];
+function switchTab(tab) {
+  activeTab = tab;
+  TABS.forEach(t => {
+    document.getElementById('screen-'+t).classList.remove('active');
+    document.getElementById('nav-'+t).classList.remove('active');
+  });
+  document.getElementById('screen-detail').classList.remove('active');
+  document.getElementById('screen-'+tab).classList.add('active');
+  document.getElementById('nav-'+tab).classList.add('active');
+  if (tab === 'projects') loadAndRenderList();
+  else if (tab === 'calendar') renderCalendar();
+  else if (tab === 'gantt') renderGantt();
+  else if (tab === 'expenses') renderExpenses();
+  else renderAlerts();
+}
+
+// ── Load all data ──
+async function loadAllDeliveries() {
+  const { data } = await sb.from('deliveries').select('*');
+  allDeliveriesCache = data || [];
+  const { data: projects } = await sb.from('projects').select('id, name');
+  projectMapCache = {};
+  (projects||[]).forEach(p => projectMapCache[p.id] = p.name);
+  updateAlertBadge();
+}
+
+function updateAlertBadge() {
+  const count = allDeliveriesCache.filter(d => {
+    const w = weeksFromNow(d.date);
+    return (d.status==='scheduled' || d.status==='transit') && w!==null && w>=0 && w<=4;
+  }).length;
+  const badge = document.getElementById('alert-badge');
+  badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none';
+}
+
+// ── Projects ──
+async function loadAndRenderList() {
+  document.getElementById('project-list').innerHTML = '<div class="loading-state">Loading…</div>';
+  const { data: projects, error } = await sb.from('projects').select('*').order('created_at',{ascending:true});
+  if (error) { toast('Could not load projects',true); document.getElementById('project-list').innerHTML='<div class="empty-state">Database error.</div>'; return; }
+  projectsCache = projects;
+  await loadAllDeliveries();
+
+  const countMap={}, costMap={};
+  allDeliveriesCache.forEach(d => {
+    countMap[d.project_id]=(countMap[d.project_id]||0)+1;
+    costMap[d.project_id]=(costMap[d.project_id]||0)+Number(d.cost);
+  });
+
+  const el = document.getElementById('project-list');
+  document.getElementById('project-count').textContent = projects.length===0?'No projects yet':`${projects.length} project${projects.length!==1?'s':''}`;
+  if (!projects.length) { el.innerHTML='<div class="empty-state">No projects yet — add your first one above.</div>'; return; }
+  el.innerHTML = projects.map(p=>`
+    <div class="project-card" onclick="openProject('${p.id}')">
+      <div class="project-dot" style="background:${dotColor[p.status]||'#888'}"></div>
+      <div class="project-info">
+        <div class="project-name">${p.name}</div>
+        <div class="project-sub">${p.client?p.client+' · ':''}${countMap[p.id]||0} deliver${(countMap[p.id]||0)!==1?'ies':'y'} · ${fmtCost(costMap[p.id]||0)}</div>
+      </div>
+      <div class="project-actions" onclick="event.stopPropagation()">
+        <span class="badge ${p.status}">${cap(p.status)}</span>
+        <button class="btn-icon" onclick="openProjectModal('${p.id}')">✎</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── Calendar ──
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent = `${MONTHS[calMonth]} ${calYear}`;
+  const grid = document.getElementById('cal-grid');
+
+  // day-of-week headers
+  let html = DAYS.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const daysInPrev = new Date(calYear, calMonth, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // build delivery map: "YYYY-MM-DD" -> [{desc, status, projectName, cost}]
+  const delivMap = {};
+  allDeliveriesCache.forEach(d => {
+    if (!d.date) return;
+    if (!delivMap[d.date]) delivMap[d.date] = [];
+    delivMap[d.date].push({ id: d.id, desc: d.description, status: d.status, projectName: projectMapCache[d.project_id]||'', cost: d.cost, projectId: d.project_id });
+  });
+
+  // prev month padding
+  for (let i = firstDay-1; i >= 0; i--) {
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${daysInPrev-i}</div></div>`;
+  }
+
+  // current month days
+  for (let day = 1; day <= daysInMonth; day++) {
+    const mm = String(calMonth+1).padStart(2,'0');
+    const dd = String(day).padStart(2,'0');
+    const key = `${calYear}-${mm}-${dd}`;
+    const isToday = new Date(calYear,calMonth,day).getTime()===today.getTime();
+    const delivs = delivMap[key]||[];
+    const hasDelivery = delivs.length > 0;
+    const show = delivs.slice(0,2);
+    const more = delivs.length - show.length;
+
+    let pips = show.map(d=>`<div class="cal-pip ${d.status}" onclick="openCalDeliveryModal('${d.id}')">${d.projectName||d.desc}</div>`).join('');
+    if (more > 0) pips += `<div class="cal-more">+${more} more</div>`;
+
+    html += `<div class="cal-day${isToday?' today':''}${hasDelivery?' has-delivery':''}">
+      <div class="cal-day-num">${day}</div>
+      ${pips}
+    </div>`;
+  }
+
+  // next month padding to fill grid
+  const total = firstDay + daysInMonth;
+  const remainder = total % 7 === 0 ? 0 : 7 - (total % 7);
+  for (let i = 1; i <= remainder; i++) {
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function calPrev() { calMonth--; if (calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+function calNext() { calMonth++; if (calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
+
+// ── Alerts ──
+async function renderAlerts() {
+  document.getElementById('alert-list').innerHTML='<div class="loading-state">Loading…</div>';
+  document.getElementById('alerts-summary').innerHTML='';
+  await loadAllDeliveries();
+
+  const alerts = allDeliveriesCache.filter(d=>{
+    const w=weeksFromNow(d.date); return (d.status==='scheduled' || d.status==='transit') && w!==null && w>=0 && w<=4;
+  }).map(d=>({...d, weeks:weeksFromNow(d.date), projectName:projectMapCache[d.project_id]||'Unknown'}))
+    .sort((a,b)=>a.date.localeCompare(b.date));
+
+  const summaryEl = document.getElementById('alerts-summary');
+  if (!alerts.length) {
+    summaryEl.innerHTML='';
+    document.getElementById('alert-list').innerHTML='<div class="empty-state">No deliveries scheduled within the next 4 weeks.</div>';
+    return;
+  }
+  const totalCost = alerts.reduce((s,d)=>s+Number(d.cost),0);
+  summaryEl.innerHTML=`<div class="alert-summary"><span class="alert-summary-text"><strong>${alerts.length} upcoming deliver${alerts.length!==1?'ies':'y'}</strong> arriving within 4 weeks · ${fmtCost(totalCost)} total</span></div>`;
+  document.getElementById('alert-list').innerHTML=alerts.map(d=>`
+    <div class="alert-card">
+      <div>
+        <div class="alert-project">${d.projectName}</div>
+        <div class="alert-desc">${d.description}</div>
+        <div class="alert-date">${fmtDate(d.date)}</div>
+      </div>
+      <div class="alert-right">
+        <div class="alert-cost">${fmtCost(d.cost)}</div>
+        <div class="alert-weeks">${d.weeks===0?'this week':d.weeks+'w away'}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Project detail ──
+async function openProject(id) {
+  previousTab = activeTab;
+  currentProjectId = id;
+  TABS.forEach(t => document.getElementById('screen-'+t).classList.remove('active'));
+  document.getElementById('screen-detail').classList.add('active');
+  await renderDetail();
+}
+
+function goBack() {
+  currentProjectId = null;
+  document.getElementById('screen-detail').classList.remove('active');
+  TABS.forEach(t => document.getElementById('nav-'+t).classList.remove('active'));
+  document.getElementById('screen-'+previousTab).classList.add('active');
+  document.getElementById('nav-'+previousTab).classList.add('active');
+  if (previousTab==='projects') loadAndRenderList();
+  else if (previousTab==='calendar') renderCalendar();
+  else renderAlerts();
+}
+
+async function renderDetail() {
+  const p = projectsCache.find(x=>x.id===currentProjectId);
+  if (!p) return;
+  document.getElementById('detail-name').textContent = p.name;
+  document.getElementById('stat-status').innerHTML=`<span class="badge ${p.status}" style="font-size:12px;">${cap(p.status)}</span>`;
+  document.getElementById('delivery-list').innerHTML='<div class="loading-state">Loading…</div>';
+  const { data: deliveries, error } = await sb.from('deliveries').select('*').eq('project_id',currentProjectId).order('date',{ascending:true});
+  if (error) { toast('Failed to load deliveries',true); return; }
+  deliveriesCache = deliveries||[];
+  document.getElementById('stat-count').textContent = deliveriesCache.length;
+  document.getElementById('stat-cost').textContent = fmtCost(deliveriesCache.reduce((s,d)=>s+Number(d.cost),0));
+  const el = document.getElementById('delivery-list');
+  if (!deliveriesCache.length) { el.innerHTML='<div class="empty-state">No deliveries yet — add one above.</div>'; return; }
+  el.innerHTML = deliveriesCache.map(d=>`
+    <div class="delivery-row">
+      <div>
+        <div class="delivery-date">${fmtDate(d.date)}</div>
+        <div class="delivery-desc">${d.description}</div>
+        <div style="margin-top:5px;"><span class="badge ${d.status}">${d.status==='transit'?'In transit':cap(d.status)}</span></div>
+      </div>
+      <div class="delivery-right">
+        <div class="delivery-cost">${fmtCost(d.cost)}</div>
+        <div class="delivery-actions">
+          <button class="btn-icon" onclick="openDeliveryModal('${d.id}')">✎</button>
+          <button class="btn-icon" onclick="deleteDelivery('${d.id}')" style="color:var(--red-text);">✕</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Project modal ──
+function openProjectModal(id) {
+  editingProjectId=id||null;
+  const btn=document.getElementById('save-project-btn');
+  document.getElementById('project-modal-title').textContent=id?'Edit project':'New project';
+  btn.textContent=id?'Save changes':'Save project'; btn.disabled=false;
+  if (id){const p=projectsCache.find(x=>x.id===id);document.getElementById('pf-name').value=p.name;document.getElementById('pf-client').value=p.client||'';document.getElementById('pf-status').value=p.status;}
+  else{document.getElementById('pf-name').value='';document.getElementById('pf-client').value='';document.getElementById('pf-status').value='active';}
+  document.getElementById('modal-project').classList.add('open');
+  setTimeout(()=>document.getElementById('pf-name').focus(),100);
+}
+function closeProjectModal(e){if(e&&e.target!==document.getElementById('modal-project'))return;document.getElementById('modal-project').classList.remove('open');}
+
+async function saveProject() {
+  const name=document.getElementById('pf-name').value.trim();if(!name){document.getElementById('pf-name').focus();return;}
+  const client=document.getElementById('pf-client').value.trim();
+  const status=document.getElementById('pf-status').value;
+  const btn=document.getElementById('save-project-btn');btn.disabled=true;btn.textContent='Saving…';
+  const {error}=editingProjectId?await sb.from('projects').update({name,client,status}).eq('id',editingProjectId):await sb.from('projects').insert({name,client,status});
+  btn.disabled=false;btn.textContent=editingProjectId?'Save changes':'Save project';
+  if(error){toast('Error saving project',true);return;}
+  toast(editingProjectId?'Project updated':'Project created');
+  document.getElementById('modal-project').classList.remove('open');
+  await loadAndRenderList();
+  if(currentProjectId&&editingProjectId===currentProjectId)await renderDetail();
+}
+
+// ── Delivery modal ──
+function openDeliveryModal(deliveryId) {
+  editingDeliveryId=deliveryId||null;
+  const btn=document.getElementById('save-delivery-btn');
+  document.getElementById('delivery-modal-title').textContent=deliveryId?'Edit delivery':'Add delivery';
+  btn.textContent=deliveryId?'Save changes':'Save delivery';btn.disabled=false;
+  if(deliveryId){const d=deliveriesCache.find(x=>x.id===deliveryId);document.getElementById('df-desc').value=d.description;document.getElementById('df-date').value=d.date||'';document.getElementById('df-cost').value=d.cost;document.getElementById('df-status').value=d.status;}
+  else{document.getElementById('df-desc').value='';document.getElementById('df-date').value=new Date().toISOString().split('T')[0];document.getElementById('df-cost').value='';document.getElementById('df-status').value='scheduled';}
+  document.getElementById('modal-delivery').classList.add('open');
+  setTimeout(()=>document.getElementById('df-desc').focus(),100);
+}
+function closeDeliveryModal(e){if(e&&e.target!==document.getElementById('modal-delivery'))return;document.getElementById('modal-delivery').classList.remove('open');}
+
+async function saveDelivery() {
+  const description=document.getElementById('df-desc').value.trim();if(!description){document.getElementById('df-desc').focus();return;}
+  const date=document.getElementById('df-date').value||null;
+  const cost=parseFloat(document.getElementById('df-cost').value)||0;
+  const status=document.getElementById('df-status').value;
+  const btn=document.getElementById('save-delivery-btn');btn.disabled=true;btn.textContent='Saving…';
+  const {error}=editingDeliveryId?await sb.from('deliveries').update({description,date,cost,status}).eq('id',editingDeliveryId):await sb.from('deliveries').insert({project_id:currentProjectId,description,date,cost,status});
+  btn.disabled=false;btn.textContent=editingDeliveryId?'Save changes':'Save delivery';
+  if(error){toast('Error saving delivery',true);return;}
+  toast(editingDeliveryId?'Delivery updated':'Delivery added');
+  document.getElementById('modal-delivery').classList.remove('open');
+  await renderDetail();
+  await loadAllDeliveries();
+}
+
+async function deleteDelivery(id) {
+  if(!confirm('Delete this delivery?'))return;
+  const {error}=await sb.from('deliveries').delete().eq('id',id);
+  if(error){toast('Error deleting',true);return;}
+  toast('Delivery deleted');await renderDetail();await loadAllDeliveries();
+}
+
+function editCurrentProject(){openProjectModal(currentProjectId);}
+
+async function deleteCurrentProject() {
+  const p=projectsCache.find(x=>x.id===currentProjectId);
+  if(!confirm(`Delete "${p.name}" and all its deliveries?`))return;
+  const {error}=await sb.from('projects').delete().eq('id',currentProjectId);
+  if(error){toast('Error deleting project',true);return;}
+  toast('Project deleted');goBack();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){document.getElementById('modal-project').classList.remove('open');document.getElementById('modal-delivery').classList.remove('open');document.getElementById('modal-cal-delivery').classList.remove('open');document.getElementById('modal-activity').classList.remove('open');document.getElementById('modal-equip').classList.remove('open');}
+});
+
+
+function openCalDeliveryModal(deliveryId) {
+  const d = allDeliveriesCache.find(x => x.id === deliveryId);
+  if (!d) return;
+  document.getElementById('cal-del-title').textContent = d.description;
+  document.getElementById('cal-del-project').textContent = projectMapCache[d.project_id] || 'Unknown project';
+  document.getElementById('cal-del-date').textContent = fmtDate(d.date);
+  document.getElementById('cal-del-cost').textContent = fmtCost(d.cost);
+  const statusLabel = d.status === 'transit' ? 'In transit' : cap(d.status);
+  document.getElementById('cal-del-status').innerHTML = `<span class="badge ${d.status}">${statusLabel}</span>`;
+  const gotoBtn = document.getElementById('cal-del-goto-btn');
+  gotoBtn.onclick = () => { closeCalDeliveryModal(); goToProjectFromCalendar(d.project_id); };
+  document.getElementById('modal-cal-delivery').classList.add('open');
+}
+
+function closeCalDeliveryModal(e) {
+  if (e && e.target !== document.getElementById('modal-cal-delivery')) return;
+  document.getElementById('modal-cal-delivery').classList.remove('open');
+}
+
+async function goToProjectFromCalendar(projectId) {
+  previousTab = 'calendar';
+  currentProjectId = projectId;
+  TABS.forEach(t => document.getElementById('screen-'+t).classList.remove('active'));
+  TABS.forEach(t => document.getElementById('nav-'+t).classList.remove('active'));
+  document.getElementById('screen-detail').classList.add('active');
+  await renderDetail();
+}
+
+
+// ── Gantt ──
+let activitiesCache = [];
+let editingActivityId = null;
+let ganttStartDate = null;
+const GANTT_WEEKS = 12;
+
+function ganttInit() {
+  const now = new Date();
+  // start on Monday of current week
+  const day = now.getDay();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  mon.setHours(0,0,0,0);
+  ganttStartDate = mon;
+}
+
+function ganttPrev() {
+  ganttStartDate = new Date(ganttStartDate);
+  ganttStartDate.setDate(ganttStartDate.getDate() - GANTT_WEEKS * 7);
+  renderGantt();
+}
+
+function ganttNext() {
+  ganttStartDate = new Date(ganttStartDate);
+  ganttStartDate.setDate(ganttStartDate.getDate() + GANTT_WEEKS * 7);
+  renderGantt();
+}
+
+function dateToStr(d) { return d.toISOString().split('T')[0]; }
+function strToDate(s) { const [y,m,d]=s.split('-'); return new Date(+y,+m-1,+d); }
+
+async function renderGantt() {
+  if (!ganttStartDate) ganttInit();
+  const ganttEnd = new Date(ganttStartDate);
+  ganttEnd.setDate(ganttStartDate.getDate() + GANTT_WEEKS * 7 - 1);
+
+  // update label
+  const fmt = d => `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`;
+  document.getElementById('gantt-range-label').textContent = `${fmt(ganttStartDate)} — ${fmt(ganttEnd)}`;
+
+  // load activities and projects
+  const { data: acts, error } = await sb.from('activities').select('*').order('start_date',{ascending:true});
+  if (error) { toast('Failed to load activities', true); return; }
+  activitiesCache = acts || [];
+
+  const { data: projs } = await sb.from('projects').select('*').order('created_at',{ascending:true});
+  projectsCache = projs || [];
+  projs.forEach(p => projectMapCache[p.id] = p.name);
+
+  const totalDays = GANTT_WEEKS * 7;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayOffset = Math.floor((today - ganttStartDate) / (24*60*60*1000));
+
+  // build column headers — one per week
+  let headerCols = '<th class="gantt-header-label">Activity</th>';
+  for (let w = 0; w < GANTT_WEEKS; w++) {
+    const wStart = new Date(ganttStartDate);
+    wStart.setDate(ganttStartDate.getDate() + w * 7);
+    headerCols += `<th style="width:${100/GANTT_WEEKS}%;">${MONTHS[wStart.getMonth()].slice(0,3)} ${wStart.getDate()}</th>`;
+  }
+
+  let html = `<thead><tr class="gantt-header-row">${headerCols}</tr></thead><tbody>`;
+
+  // group activities by project
+  const actsByProject = {};
+  activitiesCache.forEach(a => {
+    if (!actsByProject[a.project_id]) actsByProject[a.project_id] = [];
+    actsByProject[a.project_id].push(a);
+  });
+
+  // render each project
+  projectsCache.forEach(p => {
+    const acts = actsByProject[p.id] || [];
+    html += `<tr class="gantt-project-row"><td colspan="${GANTT_WEEKS+1}">${p.name}</td></tr>`;
+    if (!acts.length) {
+      html += `<tr class="gantt-activity-row"><td class="gantt-label" colspan="${GANTT_WEEKS+1}" style="color:var(--text-faint);font-size:12px;font-style:italic;">No activities — add one above</td></tr>`;
+    } else {
+      acts.forEach(a => {
+        const aStart = strToDate(a.start_date);
+        const aEnd = strToDate(a.end_date);
+        const startOff = Math.floor((aStart - ganttStartDate) / (24*60*60*1000));
+        const endOff = Math.floor((aEnd - ganttStartDate) / (24*60*60*1000));
+        const leftPct = Math.max(0, (startOff / totalDays) * 100);
+        const rightPct = Math.min(100, ((endOff + 1) / totalDays) * 100);
+        const widthPct = Math.max(0, rightPct - leftPct);
+        const visible = endOff >= 0 && startOff < totalDays;
+        const statusLabel = a.status === 'in-progress' ? 'In progress' : cap(a.status);
+
+        // today line offset
+        const todayPct = todayOffset >= 0 && todayOffset < totalDays ? (todayOffset / totalDays) * 100 : null;
+
+        html += `<tr class="gantt-activity-row">
+          <td class="gantt-label">
+            <div class="gantt-label-name">${a.name}</div>
+            <div class="gantt-label-status">${fmtDate(a.start_date)} – ${fmtDate(a.end_date)}</div>
+          </td>
+          <td class="gantt-bar-cell" colspan="${GANTT_WEEKS}" style="position:relative;">
+            ${todayPct !== null ? `<div class="gantt-today-line" style="left:${todayPct.toFixed(2)}%"></div>` : ''}
+            ${visible && widthPct > 0 ? `<div class="gantt-bar ${a.status}" style="left:${leftPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%;" onclick="openActivityModal('${a.id}')" title="${a.name}: ${statusLabel}"></div>` : ''}
+          </td>
+          <td style="padding:0 6px;white-space:nowrap;">
+            <div class="gantt-actions">
+              <button class="btn-icon" onclick="openActivityModal('${a.id}')">✎</button>
+              <button class="btn-icon" onclick="deleteActivity('${a.id}')" style="color:var(--red-text);">✕</button>
+            </div>
+          </td>
+        </tr>`;
+      });
+    }
+  });
+
+  if (!projectsCache.length) {
+    html += `<tr><td colspan="${GANTT_WEEKS+1}" style="text-align:center;padding:2rem;color:var(--text-faint);font-size:14px;">No projects yet — add some in the Projects tab first.</td></tr>`;
+  }
+
+  html += '</tbody>';
+  document.getElementById('gantt-table').innerHTML = html;
+}
+
+function populateProjectSelect(selectedId) {
+  const sel = document.getElementById('af-project');
+  sel.innerHTML = projectsCache.map(p => `<option value="${p.id}"${p.id===selectedId?' selected':''}>${p.name}</option>`).join('');
+}
+
+function openActivityModal(activityId) {
+  editingActivityId = activityId || null;
+  const btn = document.getElementById('save-activity-btn');
+  document.getElementById('activity-modal-title').textContent = activityId ? 'Edit activity' : 'Add activity';
+  btn.textContent = activityId ? 'Save changes' : 'Save activity'; btn.disabled = false;
+
+  if (activityId) {
+    const a = activitiesCache.find(x => x.id === activityId);
+    populateProjectSelect(a.project_id);
+    document.getElementById('af-name').value = a.name;
+    document.getElementById('af-start').value = a.start_date;
+    document.getElementById('af-end').value = a.end_date;
+    document.getElementById('af-status').value = a.status;
+  } else {
+    populateProjectSelect(projectsCache[0]?.id || '');
+    document.getElementById('af-name').value = '';
+    document.getElementById('af-start').value = new Date().toISOString().split('T')[0];
+    document.getElementById('af-end').value = '';
+    document.getElementById('af-status').value = 'planned';
+  }
+  document.getElementById('modal-activity').classList.add('open');
+  setTimeout(() => document.getElementById('af-name').focus(), 100);
+}
+
+function closeActivityModal(e) {
+  if (e && e.target !== document.getElementById('modal-activity')) return;
+  document.getElementById('modal-activity').classList.remove('open');
+}
+
+async function saveActivity() {
+  const name = document.getElementById('af-name').value.trim();
+  if (!name) { document.getElementById('af-name').focus(); return; }
+  const project_id = document.getElementById('af-project').value;
+  const start_date = document.getElementById('af-start').value;
+  const end_date = document.getElementById('af-end').value;
+  if (!start_date || !end_date) { toast('Please set both start and end dates', true); return; }
+  if (end_date < start_date) { toast('End date must be after start date', true); return; }
+  const status = document.getElementById('af-status').value;
+  const btn = document.getElementById('save-activity-btn'); btn.disabled=true; btn.textContent='Saving…';
+  const { error } = editingActivityId
+    ? await sb.from('activities').update({name,project_id,start_date,end_date,status}).eq('id',editingActivityId)
+    : await sb.from('activities').insert({name,project_id,start_date,end_date,status});
+  btn.disabled=false; btn.textContent = editingActivityId ? 'Save changes' : 'Save activity';
+  if (error) { toast('Error saving activity', true); return; }
+  toast(editingActivityId ? 'Activity updated' : 'Activity added');
+  document.getElementById('modal-activity').classList.remove('open');
+  await renderGantt();
+}
+
+async function deleteActivity(id) {
+  if (!confirm('Delete this activity?')) return;
+  const { error } = await sb.from('activities').delete().eq('id', id);
+  if (error) { toast('Error deleting activity', true); return; }
+  toast('Activity deleted'); await renderGantt();
+}
+
+
+// ── Expenses ──
+let expProjectId = null;
+let expWeekStart = null;
+let laborLogsCache = [];
+let equipmentCache = [];
+let editingEquipId = null;
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function expInit() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun ... 6=Sat
+  const sat = new Date(now);
+  const daysFromSat = (day + 1) % 7; // days since last Saturday
+  sat.setDate(now.getDate() - daysFromSat);
+  sat.setHours(0,0,0,0);
+  expWeekStart = sat;
+}
+
+function expWeekDates() {
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(expWeekStart);
+    d.setDate(expWeekStart.getDate() + i);
+    return d;
+  });
+}
+
+function expWeekPrev() { expWeekStart = new Date(expWeekStart); expWeekStart.setDate(expWeekStart.getDate()-7); renderExpenses(); }
+function expWeekNext() { expWeekStart = new Date(expWeekStart); expWeekStart.setDate(expWeekStart.getDate()+7); renderExpenses(); }
+
+function onExpProjectChange() {
+  expProjectId = document.getElementById('exp-project-select').value;
+  loadAndRenderExpenses();
+}
+
+async function renderExpenses() {
+  if (!expWeekStart) expInit();
+
+  // populate project select
+  const sel = document.getElementById('exp-project-select');
+  if (!projectsCache.length) {
+    const { data: projs } = await sb.from('projects').select('*').order('created_at',{ascending:true});
+    projectsCache = projs || [];
+    projs.forEach(p => projectMapCache[p.id] = p.name);
+  }
+  const prevVal = expProjectId || sel.value;
+  sel.innerHTML = projectsCache.map(p=>`<option value="${p.id}"${p.id===prevVal?' selected':''}>${p.name}</option>`).join('');
+  expProjectId = sel.value;
+
+  if (!expProjectId) {
+    document.getElementById('exp-day-grid').innerHTML = '<div class="empty-state">No projects found. Add a project first.</div>';
+    return;
+  }
+  await loadAndRenderExpenses();
+}
+
+async function loadAndRenderExpenses() {
+  if (!expWeekStart) expInit();
+  const dates = expWeekDates();
+  const weekStartStr = dateToStr(dates[0]);
+  const weekEndStr = dateToStr(dates[6]);
+
+  // update week label
+  const fmt = d => `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+  document.getElementById('exp-week-label').textContent = `${fmt(dates[0])} – ${fmt(dates[6])}, ${dates[6].getFullYear()}`;
+
+  // fetch labor logs for this project + week
+  const { data: logs } = await sb.from('labor_logs').select('*')
+    .eq('project_id', expProjectId)
+    .gte('log_date', weekStartStr)
+    .lte('log_date', weekEndStr);
+  laborLogsCache = logs || [];
+
+  // fetch equipment for this project
+  const { data: equips } = await sb.from('equipment_rentals').select('*')
+    .eq('project_id', expProjectId)
+    .order('created_at', {ascending:true});
+  equipmentCache = equips || [];
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const logMap = {};
+  laborLogsCache.forEach(l => logMap[l.log_date] = l);
+
+  // render day grid
+  let laborTotal = 0;
+  let dayHtml = dates.map(d => {
+    const ds = dateToStr(d);
+    const log = logMap[ds] || {};
+    const installers = log.installers || 0;
+    const avgPay = log.avg_pay || 0;
+    const hours = log.hours_worked || 0;
+    const dayTotal = installers * avgPay * hours;
+    laborTotal += dayTotal;
+    const isToday = d.getTime() === today.getTime();
+    return `<div class="exp-day-row${isToday?' today-row':''}">
+      <div>
+        <div class="exp-day-name">${DAY_NAMES[d.getDay()].slice(0,3)}</div>
+        <div class="exp-day-date">${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}</div>
+      </div>
+      <input class="exp-day-input" type="number" min="0" placeholder="Installers" value="${installers||''}"
+        onchange="saveLaborLog('${ds}', this.value, document.getElementById('pay-${ds}').value, document.getElementById('hrs-${ds}').value)"
+        id="inst-${ds}" />
+      <div style="position:relative;">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);pointer-events:none;">$</span>
+        <input class="exp-day-input" type="number" min="0" step="0.01" placeholder="$/hr" value="${avgPay||''}"
+          onchange="saveLaborLog('${ds}', document.getElementById('inst-${ds}').value, this.value, document.getElementById('hrs-${ds}').value)"
+          id="pay-${ds}" style="padding-left:20px;" />
+      </div>
+      <input class="exp-day-input" type="number" min="0" step="0.5" placeholder="Hrs" value="${hours||''}"
+        onchange="saveLaborLog('${ds}', document.getElementById('inst-${ds}').value, document.getElementById('pay-${ds}').value, this.value)"
+        id="hrs-${ds}" />
+      <div class="exp-day-total">${dayTotal > 0 ? fmtCost(dayTotal) : '—'}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('exp-day-grid').innerHTML = dayHtml;
+
+  // render equipment
+  const equipTotal = equipmentCache.reduce((s,e) => s + (Number(e.quantity)||1) * Number(e.monthly_cost), 0);
+  const equipHtml = equipmentCache.length
+    ? equipmentCache.map(e => {
+        const qty = e.quantity || 1;
+        const totalCost = qty * Number(e.monthly_cost);
+        return `
+      <div class="exp-equip-row">
+        <div class="exp-equip-name">${e.name}</div>
+        <div class="exp-equip-cost" style="text-align:center;font-size:12px;color:var(--text-muted);">×${qty}</div>
+        <div class="exp-equip-cost">${fmtCost(totalCost)}/mo</div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn-icon" onclick="openEquipModal('${e.id}')">✎</button>
+          <button class="btn-icon" onclick="deleteEquipment('${e.id}')" style="color:var(--red-text);">✕</button>
+        </div>
+      </div>`;
+      }).join('')
+    : '<div class="empty-state">No equipment yet — add some above.</div>';
+  document.getElementById('exp-equip-list').innerHTML = equipHtml;
+
+  // update summary metrics
+  document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal);
+  document.getElementById('exp-stat-equip').textContent = fmtCost(equipTotal);
+
+  // Monthly total: all labor logs for this project in the current calendar month + equipment
+  const now = new Date();
+  const monthStart = dateToStr(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthEnd = dateToStr(new Date(now.getFullYear(), now.getMonth()+1, 0));
+  const { data: monthLogs } = await sb.from('labor_logs').select('*')
+    .eq('project_id', expProjectId)
+    .gte('log_date', monthStart)
+    .lte('log_date', monthEnd);
+  const monthLaborTotal = (monthLogs||[]).reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0), 0);
+  document.getElementById('exp-stat-total').textContent = fmtCost(monthLaborTotal + equipTotal);
+}
+
+async function saveLaborLog(dateStr, installersVal, payVal, hoursVal) {
+  const installers = parseInt(installersVal) || 0;
+  const avg_pay = parseFloat(payVal) || 0;
+  const hours_worked = parseFloat(hoursVal) || 0;
+  const existing = laborLogsCache.find(l => l.log_date === dateStr);
+  if (existing) {
+    await sb.from('labor_logs').update({installers, avg_pay, hours_worked}).eq('id', existing.id);
+  } else {
+    await sb.from('labor_logs').insert({project_id: expProjectId, log_date: dateStr, installers, avg_pay, hours_worked});
+  }
+  await loadAndRenderExpenses();
+}
+
+function openEquipModal(equipId) {
+  editingEquipId = equipId || null;
+  const btn = document.getElementById('save-equip-btn');
+  document.getElementById('equip-modal-title').textContent = equipId ? 'Edit equipment' : 'Add equipment';
+  btn.textContent = equipId ? 'Save changes' : 'Save'; btn.disabled = false;
+  if (equipId) {
+    const e = equipmentCache.find(x => x.id === equipId);
+    document.getElementById('ef-name').value = e.name;
+    document.getElementById('ef-cost').value = e.monthly_cost;
+    document.getElementById('ef-qty').value = e.quantity || 1;
+  } else {
+    document.getElementById('ef-name').value = '';
+    document.getElementById('ef-cost').value = '';
+    document.getElementById('ef-qty').value = 1;
+  }
+  document.getElementById('modal-equip').classList.add('open');
+  setTimeout(() => document.getElementById('ef-name').focus(), 100);
+}
+
+function closeEquipModal(e) {
+  if (e && e.target !== document.getElementById('modal-equip')) return;
+  document.getElementById('modal-equip').classList.remove('open');
+}
+
+async function saveEquipment() {
+  const name = document.getElementById('ef-name').value.trim();
+  if (!name) { document.getElementById('ef-name').focus(); return; }
+  const monthly_cost = parseFloat(document.getElementById('ef-cost').value) || 0;
+  const quantity = parseInt(document.getElementById('ef-qty').value) || 1;
+  const btn = document.getElementById('save-equip-btn'); btn.disabled=true; btn.textContent='Saving…';
+  const { error } = editingEquipId
+    ? await sb.from('equipment_rentals').update({name, monthly_cost, quantity}).eq('id', editingEquipId)
+    : await sb.from('equipment_rentals').insert({project_id: expProjectId, name, monthly_cost, quantity});
+  btn.disabled=false; btn.textContent = editingEquipId ? 'Save changes' : 'Save';
+  if (error) { toast('Error saving equipment', true); return; }
+  toast(editingEquipId ? 'Equipment updated' : 'Equipment added');
+  document.getElementById('modal-equip').classList.remove('open');
+  await loadAndRenderExpenses();
+}
+
+async function deleteEquipment(id) {
+  if (!confirm('Delete this equipment rental?')) return;
+  const { error } = await sb.from('equipment_rentals').delete().eq('id', id);
+  if (error) { toast('Error deleting', true); return; }
+  toast('Equipment removed'); await loadAndRenderExpenses();
+}
+
+const PASS_KEY = 'dt_auth';
+const CORRECT = '2550MCIS!';
+
+function checkAuth() { return sessionStorage.getItem(PASS_KEY) === 'ok'; }
+
+function showPasswordGate() {
+  document.getElementById('layout-main').style.display = 'none';
+  document.getElementById('password-gate').style.display = 'flex';
+  setTimeout(() => document.getElementById('gate-input').focus(), 100);
+}
+
+function submitPassword() {
+  const val = document.getElementById('gate-input').value;
+  if (val === CORRECT) {
+    sessionStorage.setItem(PASS_KEY, 'ok');
+    document.getElementById('password-gate').style.display = 'none';
+    document.getElementById('layout-main').style.display = 'grid';
+    loadAndRenderList();
+  } else {
+    const err = document.getElementById('gate-error');
+    err.style.display = 'block';
+    document.getElementById('gate-input').value = '';
+    document.getElementById('gate-input').focus();
+    setTimeout(() => err.style.display = 'none', 2500);
+  }
+}
+
+document.getElementById('gate-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitPassword();
+});
+
+if (checkAuth()) {
+  document.getElementById('layout-main').style.display = 'grid';
+  loadAndRenderList();
+} else {
+  showPasswordGate();
+}
+</script>
+</body>
+</html>
