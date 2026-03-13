@@ -341,6 +341,10 @@
           <button class="btn primary" onclick="openEquipModal()">+ Add equipment</button>
         </div>
         <div class="exp-equip-list" id="exp-equip-list"></div>
+        <div style="margin-top:1.5rem;">
+          <div class="exp-section-title">Deliveries — this week</div>
+          <div class="exp-equip-list" id="exp-deliv-list"></div>
+        </div>
       </div>
 
 
@@ -376,8 +380,9 @@
             </div>
             <button class="btn" onclick="window.print()">⎙ Export PDF</button>
           </div>
-          <div class="rep-summary-grid">
+          <div class="rep-summary-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;">
             <div class="metric"><div class="metric-label">Total labor</div><div class="metric-value" id="rep-stat-labor">$0.00</div></div>
+            <div class="metric"><div class="metric-label">Deliveries</div><div class="metric-value" id="rep-stat-deliveries">$0.00</div></div>
             <div class="metric"><div class="metric-label">Equipment</div><div class="metric-value" id="rep-stat-equip">$0.00</div></div>
             <div class="metric"><div class="metric-label">Grand total</div><div class="metric-value" id="rep-stat-grand">$0.00</div></div>
           </div>
@@ -1185,6 +1190,27 @@ async function loadAndRenderExpenses() {
   document.getElementById('exp-equip-list').innerHTML = equipHtml;
 
   // update summary metrics
+  // fetch deliveries for this week
+  const { data: weekDeliveries } = await sb.from('deliveries').select('*')
+    .eq('project_id', expProjectId)
+    .gte('date', weekStartStr)
+    .lte('date', weekEndStr)
+    .order('date', {ascending:true});
+  const weekDelivs = weekDeliveries || [];
+  const delivTotal = weekDelivs.reduce((s,d) => s + Number(d.cost), 0);
+
+  const delivHtml = weekDelivs.length
+    ? weekDelivs.map(d => `
+      <div class="exp-equip-row" style="grid-template-columns:auto 1fr auto auto;">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text-muted);">${fmtDate(d.date)}</div>
+        <div class="exp-equip-name">${d.description}</div>
+        <div><span class="badge ${d.status}">${d.status==='transit'?'In transit':cap(d.status)}</span></div>
+        <div class="exp-equip-cost">${fmtCost(d.cost)}</div>
+      </div>`).join('')
+    : '<div class="empty-state">No deliveries this week.</div>';
+  document.getElementById('exp-deliv-list').innerHTML = delivHtml;
+  document.getElementById('exp-stat-deliv').textContent = fmtCost(delivTotal);
+
   document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal);
   document.getElementById('exp-stat-equip').textContent = fmtCost(equipTotal);
 
@@ -1196,8 +1222,13 @@ async function loadAndRenderExpenses() {
     .eq('project_id', expProjectId)
     .gte('log_date', monthStart)
     .lte('log_date', monthEnd);
+  const { data: monthDeliveries } = await sb.from('deliveries').select('*')
+    .eq('project_id', expProjectId)
+    .gte('date', monthStart)
+    .lte('date', monthEnd);
   const monthLaborTotal = (monthLogs||[]).reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0), 0);
-  document.getElementById('exp-stat-total').textContent = fmtCost(monthLaborTotal + equipTotal);
+  const monthDelivTotal = (monthDeliveries||[]).reduce((s,d) => s + Number(d.cost), 0);
+  document.getElementById('exp-stat-total').textContent = fmtCost(monthLaborTotal + equipTotal + monthDelivTotal);
 }
 
 async function saveLaborLog(dateStr, installersVal, payVal, hoursVal) {
@@ -1299,6 +1330,12 @@ async function generateReport() {
   let equipQuery = sb.from('equipment_rentals').select('*');
   if (projectVal !== 'all') equipQuery = equipQuery.eq('project_id', projectVal);
   const { data: equips } = await equipQuery.order('project_id', {ascending:true});
+
+  // fetch delivered deliveries in date range
+  let delivQuery = sb.from('deliveries').select('*').eq('status','delivered').gte('date', startStr).lte('date', endStr);
+  if (projectVal !== 'all') delivQuery = delivQuery.eq('project_id', projectVal);
+  const { data: reportDeliveries } = await delivQuery.order('date', {ascending:true});
+  const allReportDeliveries = reportDeliveries || [];
 
   const allLogs = logs || [];
   const allEquips = equips || [];
@@ -1420,18 +1457,59 @@ async function generateReport() {
     equipHtml = `<div style="font-size:13px;color:var(--text-faint);padding:6px 0;">No equipment rentals on record.</div>`;
   }
 
-  const grandTotal = totalLabor + totalEquip;
+  // deliveries total
+  let totalDeliveries = allReportDeliveries.reduce((s,d) => s + Number(d.cost), 0);
+  const grandTotal = totalLabor + totalEquip + totalDeliveries;
 
   // update summary metrics
   document.getElementById('rep-stat-labor').textContent = fmtCost(totalLabor);
   document.getElementById('rep-stat-equip').textContent = fmtCost(totalEquip);
+  document.getElementById('rep-stat-deliveries').textContent = fmtCost(totalDeliveries);
   document.getElementById('rep-stat-grand').textContent = fmtCost(grandTotal);
 
   // build full body
+  // ── Deliveries section HTML ──
+  let deliveriesHtml = '';
+  if (allReportDeliveries.length) {
+    const delivsByProject = {};
+    allReportDeliveries.forEach(d => {
+      if (!delivsByProject[d.project_id]) delivsByProject[d.project_id] = [];
+      delivsByProject[d.project_id].push(d);
+    });
+    projectsToShow.forEach(proj => {
+      const projDelivs = delivsByProject[proj.id] || [];
+      if (!projDelivs.length) return;
+      if (projectVal === 'all') {
+        deliveriesHtml += `<div style="font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--text-muted);">${proj.name}</div>`;
+      }
+      let projDelivTotal = 0;
+      let rows = projDelivs.map(d => {
+        projDelivTotal += Number(d.cost);
+        return `<tr>
+          <td>${fmtDate(d.date)}</td>
+          <td>${d.description}</td>
+          <td class="num">${fmtCost(d.cost)}</td>
+        </tr>`;
+      }).join('');
+      deliveriesHtml += `<table class="rep-table" style="margin-bottom:10px;">
+        <thead><tr><th>Date</th><th>Description</th><th class="num">Cost</th></tr></thead>
+        <tbody>${rows}
+          <tr class="subtotal"><td colspan="2">Subtotal</td><td class="num">${fmtCost(projDelivTotal)}</td></tr>
+        </tbody>
+      </table>`;
+    });
+  } else {
+    deliveriesHtml = `<div style="font-size:13px;color:var(--text-faint);padding:6px 0;">No delivered deliveries in this period.</div>`;
+  }
+
   document.getElementById('rep-body').innerHTML = `
     <div class="rep-section">
       <div class="rep-section-title">Labor breakdown</div>
       ${laborHtml || '<div style="font-size:13px;color:var(--text-faint);">No labor logged for this period.</div>'}
+    </div>
+    <div class="rep-section">
+      <div class="rep-section-title">Deliveries (received)</div>
+      ${deliveriesHtml}
     </div>
     <div class="rep-section">
       <div class="rep-section-title">Equipment rentals</div>
