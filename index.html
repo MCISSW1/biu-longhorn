@@ -1111,45 +1111,40 @@ async function renderExpenses() {
 
 async function loadAndRenderExpenses() {
   if (!expWeekStart) expInit();
-  // always re-read project from select in case it changed
   const selEl = document.getElementById('exp-project-select');
   if (selEl && selEl.value) expProjectId = selEl.value;
   if (!expProjectId) return;
+
   const dates = expWeekDates();
   const weekStartStr = dateToStr(dates[0]);
   const weekEndStr = dateToStr(dates[6]);
 
-  // update week label
   const fmt = d => `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`;
   document.getElementById('exp-week-label').textContent = `${fmt(dates[0])} – ${fmt(dates[6])}, ${dates[6].getFullYear()}`;
 
-  // fetch labor logs for this project + week
-  const { data: logs } = await sb.from('labor_logs').select('*')
-    .eq('project_id', expProjectId)
-    .gte('log_date', weekStartStr)
-    .lte('log_date', weekEndStr);
-  laborLogsCache = logs || [];
+  // Fetch all data in parallel
+  const [logsRes, equipsRes, delivsRes] = await Promise.all([
+    sb.from('labor_logs').select('*').eq('project_id', expProjectId).gte('log_date', weekStartStr).lte('log_date', weekEndStr),
+    sb.from('equipment_rentals').select('*').eq('project_id', expProjectId).order('created_at', {ascending:true}),
+    sb.from('deliveries').select('*').eq('project_id', expProjectId).gte('date', weekStartStr).lte('date', weekEndStr).order('date', {ascending:true})
+  ]);
 
-  // fetch equipment for this project
-  const { data: equips } = await sb.from('equipment_rentals').select('*')
-    .eq('project_id', expProjectId)
-    .order('created_at', {ascending:true});
-  equipmentCache = equips || [];
+  laborLogsCache = logsRes.data || [];
+  equipmentCache = equipsRes.data || [];
+  const weekDelivs = delivsRes.data || [];
 
   const today = new Date(); today.setHours(0,0,0,0);
   const logMap = {};
   laborLogsCache.forEach(l => logMap[l.log_date] = l);
 
-  // render day grid
-  let laborTotal = 0;
+  // Render day grid
   let dayHtml = dates.map(d => {
     const ds = dateToStr(d);
     const log = logMap[ds] || {};
-    const installers = log.installers || 0;
-    const avgPay = log.avg_pay || 0;
-    const hours = log.hours_worked || 0;
-    const dayTotal = installers * avgPay * (log.hours_worked!=null ? hours : (hours||8));
-    laborTotal += dayTotal;
+    const installers = Number(log.installers) || 0;
+    const avgPay = Number(log.avg_pay) || 0;
+    const hours = (log.hours_worked !== null && log.hours_worked !== undefined) ? Number(log.hours_worked) : 0;
+    const dayTotal = installers * avgPay * hours;
     const isToday = d.getTime() === today.getTime();
     return `<div class="exp-day-row${isToday?' today-row':''}">
       <div>
@@ -1173,36 +1168,27 @@ async function loadAndRenderExpenses() {
   }).join('');
   document.getElementById('exp-day-grid').innerHTML = dayHtml;
 
-  // render equipment
+  // Equipment
   const equipTotal = equipmentCache.reduce((s,e) => s + (Number(e.quantity)||1) * Number(e.monthly_cost), 0);
   const equipHtml = equipmentCache.length
     ? equipmentCache.map(e => {
         const qty = e.quantity || 1;
         const totalCost = qty * Number(e.monthly_cost);
-        return `
-      <div class="exp-equip-row">
-        <div class="exp-equip-name">${e.name}</div>
-        <div class="exp-equip-cost" style="text-align:center;font-size:12px;color:var(--text-muted);">×${qty}</div>
-        <div class="exp-equip-cost">${fmtCost(totalCost)}/mo</div>
-        <div style="display:flex;gap:4px;">
-          <button class="btn-icon" onclick="openEquipModal('${e.id}')">✎</button>
-          <button class="btn-icon" onclick="deleteEquipment('${e.id}')" style="color:var(--red-text);">✕</button>
-        </div>
-      </div>`;
+        return `<div class="exp-equip-row">
+          <div class="exp-equip-name">${e.name}</div>
+          <div class="exp-equip-cost" style="text-align:center;font-size:12px;color:var(--text-muted);">×${qty}</div>
+          <div class="exp-equip-cost">${fmtCost(totalCost)}/mo</div>
+          <div style="display:flex;gap:4px;">
+            <button class="btn-icon" onclick="openEquipModal('${e.id}')">✎</button>
+            <button class="btn-icon" onclick="deleteEquipment('${e.id}')" style="color:var(--red-text);">✕</button>
+          </div>
+        </div>`;
       }).join('')
     : '<div class="empty-state">No equipment yet — add some above.</div>';
   document.getElementById('exp-equip-list').innerHTML = equipHtml;
 
-  // update summary metrics
-  // fetch deliveries for this week
-  const { data: weekDeliveries } = await sb.from('deliveries').select('*')
-    .eq('project_id', expProjectId)
-    .gte('date', weekStartStr)
-    .lte('date', weekEndStr)
-    .order('date', {ascending:true});
-  const weekDelivs = weekDeliveries || [];
+  // Deliveries this week
   const delivTotal = weekDelivs.reduce((s,d) => s + Number(d.cost), 0);
-
   const delivHtml = weekDelivs.length
     ? weekDelivs.map(d => `
       <div class="exp-equip-row" style="grid-template-columns:auto 1fr auto auto;">
@@ -1212,34 +1198,37 @@ async function loadAndRenderExpenses() {
         <div class="exp-equip-cost">${fmtCost(d.cost)}</div>
       </div>`).join('')
     : '<div class="empty-state">No deliveries this week.</div>';
-  const delivListEl = document.getElementById('exp-deliv-list'); if(delivListEl) delivListEl.innerHTML = delivHtml;
-  const delivStatEl = document.getElementById('exp-stat-deliv'); if(delivStatEl) delivStatEl.textContent = fmtCost(delivTotal);
+  const delivListEl = document.getElementById('exp-deliv-list');
+  if (delivListEl) delivListEl.innerHTML = delivHtml;
 
-  // Recalculate from cache to ensure accuracy
-  const laborTotal2 = laborLogsCache.reduce((s,l) => {
+  // Summary metrics — labor from cache
+  const laborTotal = laborLogsCache.reduce((s,l) => {
     const inst = Number(l.installers) || 0;
     const pay = Number(l.avg_pay) || 0;
-    const hrs = (l.hours_worked !== null && l.hours_worked !== undefined) ? Number(l.hours_worked) : 8;
+    const hrs = (l.hours_worked !== null && l.hours_worked !== undefined) ? Number(l.hours_worked) : 0;
     return s + (inst * pay * hrs);
   }, 0);
-  console.log('Labor logs:', laborLogsCache, 'Total:', laborTotal2);
-  document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal2);
-  document.getElementById('exp-stat-equip').textContent = fmtCost(equipTotal);
 
-  // Monthly total: all labor logs for this project in the current calendar month + equipment
+  document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal);
+  document.getElementById('exp-stat-equip').textContent = fmtCost(equipTotal);
+  const delivStatEl = document.getElementById('exp-stat-deliv');
+  if (delivStatEl) delivStatEl.textContent = fmtCost(delivTotal);
+
+  // Monthly total
   const now = new Date();
   const monthStart = dateToStr(new Date(now.getFullYear(), now.getMonth(), 1));
   const monthEnd = dateToStr(new Date(now.getFullYear(), now.getMonth()+1, 0));
-  const { data: monthLogs } = await sb.from('labor_logs').select('*')
-    .eq('project_id', expProjectId)
-    .gte('log_date', monthStart)
-    .lte('log_date', monthEnd);
-  const { data: monthDeliveries } = await sb.from('deliveries').select('*')
-    .eq('project_id', expProjectId)
-    .gte('date', monthStart)
-    .lte('date', monthEnd);
-  const monthLaborTotal = (monthLogs||[]).reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (l.hours_worked!=null ? Number(l.hours_worked) : 8), 0);
-  const monthDelivTotal = (monthDeliveries||[]).reduce((s,d) => s + Number(d.cost), 0);
+  const [monthLogsRes, monthDelivsRes] = await Promise.all([
+    sb.from('labor_logs').select('*').eq('project_id', expProjectId).gte('log_date', monthStart).lte('log_date', monthEnd),
+    sb.from('deliveries').select('*').eq('project_id', expProjectId).gte('date', monthStart).lte('date', monthEnd)
+  ]);
+  const monthLaborTotal = (monthLogsRes.data||[]).reduce((s,l) => {
+    const inst = Number(l.installers)||0;
+    const pay = Number(l.avg_pay)||0;
+    const hrs = (l.hours_worked !== null && l.hours_worked !== undefined) ? Number(l.hours_worked) : 0;
+    return s + (inst * pay * hrs);
+  }, 0);
+  const monthDelivTotal = (monthDelivsRes.data||[]).reduce((s,d) => s + Number(d.cost), 0);
   document.getElementById('exp-stat-total').textContent = fmtCost(monthLaborTotal + equipTotal + monthDelivTotal);
 }
 
