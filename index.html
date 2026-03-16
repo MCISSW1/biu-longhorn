@@ -1211,7 +1211,9 @@ async function loadAndRenderExpenses() {
   document.getElementById('exp-deliv-list').innerHTML = delivHtml;
   document.getElementById('exp-stat-deliv').textContent = fmtCost(delivTotal);
 
-  document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal);
+  // Recalculate from cache to ensure accuracy
+  const laborTotal2 = laborLogsCache.reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0), 0);
+  document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal2);
   document.getElementById('exp-stat-equip').textContent = fmtCost(equipTotal);
 
   // Monthly total: all labor logs for this project in the current calendar month + equipment
