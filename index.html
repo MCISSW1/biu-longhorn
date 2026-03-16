@@ -1212,8 +1212,8 @@ async function loadAndRenderExpenses() {
         <div class="exp-equip-cost">${fmtCost(d.cost)}</div>
       </div>`).join('')
     : '<div class="empty-state">No deliveries this week.</div>';
-  document.getElementById('exp-deliv-list').innerHTML = delivHtml;
-  document.getElementById('exp-stat-deliv').textContent = fmtCost(delivTotal);
+  const delivListEl = document.getElementById('exp-deliv-list'); if(delivListEl) delivListEl.innerHTML = delivHtml;
+  const delivStatEl = document.getElementById('exp-stat-deliv'); if(delivStatEl) delivStatEl.textContent = fmtCost(delivTotal);
 
   // Recalculate from cache to ensure accuracy
   const laborTotal2 = laborLogsCache.reduce((s,l) => {
