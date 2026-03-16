@@ -1111,6 +1111,10 @@ async function renderExpenses() {
 
 async function loadAndRenderExpenses() {
   if (!expWeekStart) expInit();
+  // always re-read project from select in case it changed
+  const selEl = document.getElementById('exp-project-select');
+  if (selEl && selEl.value) expProjectId = selEl.value;
+  if (!expProjectId) return;
   const dates = expWeekDates();
   const weekStartStr = dateToStr(dates[0]);
   const weekEndStr = dateToStr(dates[6]);
@@ -1144,7 +1148,7 @@ async function loadAndRenderExpenses() {
     const installers = log.installers || 0;
     const avgPay = log.avg_pay || 0;
     const hours = log.hours_worked || 0;
-    const dayTotal = installers * avgPay * hours;
+    const dayTotal = installers * avgPay * (log.hours_worked!=null ? hours : (hours||8));
     laborTotal += dayTotal;
     const isToday = d.getTime() === today.getTime();
     return `<div class="exp-day-row${isToday?' today-row':''}">
@@ -1212,7 +1216,13 @@ async function loadAndRenderExpenses() {
   document.getElementById('exp-stat-deliv').textContent = fmtCost(delivTotal);
 
   // Recalculate from cache to ensure accuracy
-  const laborTotal2 = laborLogsCache.reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0), 0);
+  const laborTotal2 = laborLogsCache.reduce((s,l) => {
+    const inst = Number(l.installers) || 0;
+    const pay = Number(l.avg_pay) || 0;
+    const hrs = (l.hours_worked !== null && l.hours_worked !== undefined) ? Number(l.hours_worked) : 8;
+    return s + (inst * pay * hrs);
+  }, 0);
+  console.log('Labor logs:', laborLogsCache, 'Total:', laborTotal2);
   document.getElementById('exp-stat-labor').textContent = fmtCost(laborTotal2);
   document.getElementById('exp-stat-equip').textContent = fmtCost(equipTotal);
 
@@ -1228,7 +1238,7 @@ async function loadAndRenderExpenses() {
     .eq('project_id', expProjectId)
     .gte('date', monthStart)
     .lte('date', monthEnd);
-  const monthLaborTotal = (monthLogs||[]).reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0), 0);
+  const monthLaborTotal = (monthLogs||[]).reduce((s,l) => s + (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (l.hours_worked!=null ? Number(l.hours_worked) : 8), 0);
   const monthDelivTotal = (monthDeliveries||[]).reduce((s,d) => s + Number(d.cost), 0);
   document.getElementById('exp-stat-total').textContent = fmtCost(monthLaborTotal + equipTotal + monthDelivTotal);
 }
@@ -1392,7 +1402,7 @@ async function generateReport() {
       let weekTotal = 0;
 
       let rows = weekLogs.map(l => {
-        const dayTotal = (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (Number(l.hours_worked)||0);
+        const dayTotal = (Number(l.installers)||0) * (Number(l.avg_pay)||0) * (l.hours_worked!=null ? Number(l.hours_worked) : 8);
         weekTotal += dayTotal;
         totalLabor += dayTotal;
         const d = strToDate(l.log_date);
