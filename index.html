@@ -199,6 +199,16 @@
   .note-add-row { display: flex; gap: 8px; margin-top: 6px; }
   .note-input { flex: 1; font-family: var(--sans); font-size: 13px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); outline: none; resize: vertical; min-height: 38px; transition: border-color 0.12s; }
   .note-input:focus { border-color: var(--text); }
+
+  /* ── Forecast ── */
+  .forecast-month-block { margin-bottom: 1.5rem; }
+  .forecast-month-label { font-size: 15px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .forecast-month-total { font-family: var(--mono); font-size: 14px; color: var(--text-muted); }
+  .forecast-bar-wrap { background: var(--surface2); border-radius: 4px; height: 10px; margin-bottom: 10px; overflow: hidden; }
+  .forecast-bar { height: 100%; background: var(--accent-bg); border-radius: 4px; transition: width 0.4s; }
+  .rep-tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; }
+  .rep-tab { padding: 7px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); transition: all 0.12s; }
+  .rep-tab.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent-bg); }
   /* modal */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(20,18,14,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
   .modal-backdrop.open { opacity: 1; pointer-events: all; }
@@ -369,7 +379,13 @@
         <div class="page-header">
           <div><h1>Reports</h1><p>Generate expense reports by date range</p></div>
         </div>
-        <div class="rep-form">
+        <div class="rep-tabs">
+          <button class="rep-tab active" id="rep-tab-expense" onclick="switchRepTab('expense')">Expense Report</button>
+          <button class="rep-tab" id="rep-tab-forecast" onclick="switchRepTab('forecast')">Forecast</button>
+        </div>
+
+        <!-- Expense report form -->
+        <div id="rep-form-expense" class="rep-form">
           <div class="rep-form-row">
             <div class="form-group" style="margin-bottom:0;">
               <label>Project</label>
@@ -388,6 +404,27 @@
             <button class="btn primary" onclick="generateReport()" style="height:40px;align-self:end;">Generate</button>
           </div>
         </div>
+
+        <!-- Forecast form -->
+        <div id="rep-form-forecast" class="rep-form" style="display:none;">
+          <div class="rep-form-row" style="grid-template-columns:1fr 1fr auto;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Project</label>
+              <select id="forecast-project-select">
+                <option value="all">All projects</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Months ahead</label>
+              <select id="forecast-months">
+                <option value="3">3 months</option>
+                <option value="6" selected>6 months</option>
+                <option value="12">12 months</option>
+              </select>
+            </div>
+            <button class="btn primary" onclick="generateForecast()" style="height:40px;align-self:end;">Generate</button>
+          </div>
+        </div>
         <div class="rep-output" id="rep-output">
           <div class="rep-header">
             <div>
@@ -403,6 +440,23 @@
             <div class="metric"><div class="metric-label">Grand total</div><div class="metric-value" id="rep-stat-grand">$0.00</div></div>
           </div>
           <div id="rep-body"></div>
+        </div>
+
+        <!-- Forecast output -->
+        <div class="rep-output" id="forecast-output">
+          <div class="rep-header">
+            <div>
+              <div class="rep-title" id="forecast-title"></div>
+              <div class="rep-subtitle" id="forecast-subtitle"></div>
+            </div>
+            <button class="btn" onclick="window.print()">⎙ Export PDF</button>
+          </div>
+          <div class="rep-summary-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="metric"><div class="metric-label">Total forecast</div><div class="metric-value" id="forecast-stat-total">$0.00</div></div>
+            <div class="metric"><div class="metric-label">Deliveries</div><div class="metric-value" id="forecast-stat-count">0</div></div>
+            <div class="metric"><div class="metric-label">Avg / month</div><div class="metric-value" id="forecast-stat-avg">$0.00</div></div>
+          </div>
+          <div id="forecast-body"></div>
         </div>
       </div>
 
@@ -1325,22 +1379,130 @@ async function deleteEquipment(id) {
 
 
 // ── Reports ──
+function switchRepTab(tab) {
+  document.getElementById('rep-tab-expense').classList.toggle('active', tab==='expense');
+  document.getElementById('rep-tab-forecast').classList.toggle('active', tab==='forecast');
+  document.getElementById('rep-form-expense').style.display = tab==='expense' ? '' : 'none';
+  document.getElementById('rep-form-forecast').style.display = tab==='forecast' ? '' : 'none';
+  document.getElementById('rep-output').classList.remove('visible');
+  document.getElementById('forecast-output').classList.remove('visible');
+}
+
 async function renderReportsTab() {
-  // populate project select
+  // populate project selects
   if (!projectsCache.length) {
     const { data: projs } = await sb.from('projects').select('*').order('created_at',{ascending:true});
     projectsCache = projs || [];
     projs.forEach(p => projectMapCache[p.id] = p.name);
   }
-  const sel = document.getElementById('rep-project-select');
-  sel.innerHTML = '<option value="all">All projects</option>' +
+  const projOptions = '<option value="all">All projects</option>' +
     projectsCache.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('rep-project-select').innerHTML = projOptions;
+  document.getElementById('forecast-project-select').innerHTML = projOptions;
 
   // default date range: current month
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth();
   document.getElementById('rep-start').value = dateToStr(new Date(y, m, 1));
   document.getElementById('rep-end').value = dateToStr(new Date(y, m+1, 0));
+}
+
+async function generateForecast() {
+  const projectVal = document.getElementById('forecast-project-select').value;
+  const monthsAhead = parseInt(document.getElementById('forecast-months').value) || 6;
+  const projectLabel = projectVal === 'all' ? 'All Projects' : projectMapCache[projectVal];
+
+  const now = new Date();
+  const forecastStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const forecastEnd = new Date(now.getFullYear(), now.getMonth() + monthsAhead, 0);
+
+  document.getElementById('forecast-title').textContent = `Material Forecast — ${projectLabel}`;
+  document.getElementById('forecast-subtitle').textContent = `${fmtDate(dateToStr(forecastStart))} to ${fmtDate(dateToStr(forecastEnd))} (${monthsAhead} months)`;
+
+  // Fetch all deliveries in forecast window (all statuses)
+  let query = sb.from('deliveries').select('*')
+    .gte('date', dateToStr(forecastStart))
+    .lte('date', dateToStr(forecastEnd))
+    .order('date', {ascending:true});
+  if (projectVal !== 'all') query = query.eq('project_id', projectVal);
+  const { data: deliveries } = await query;
+  const allDelivs = deliveries || [];
+
+  // Group by month
+  const monthMap = {};
+  allDelivs.forEach(d => {
+    const dt = strToDate(d.date);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+    if (!monthMap[key]) monthMap[key] = { deliveries: [], total: 0 };
+    monthMap[key].deliveries.push(d);
+    monthMap[key].total += Number(d.cost);
+  });
+
+  const totalForecast = allDelivs.reduce((s,d) => s + Number(d.cost), 0);
+  const maxMonthTotal = Math.max(...Object.values(monthMap).map(m => m.total), 1);
+
+  document.getElementById('forecast-stat-total').textContent = fmtCost(totalForecast);
+  document.getElementById('forecast-stat-count').textContent = allDelivs.length;
+  document.getElementById('forecast-stat-avg').textContent = fmtCost(totalForecast / monthsAhead);
+
+  // Build month blocks — fill in all months even empty ones
+  let bodyHtml = '';
+  for (let i = 0; i < monthsAhead; i++) {
+    const mDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const key = `${mDate.getFullYear()}-${String(mDate.getMonth()+1).padStart(2,'0')}`;
+    const mData = monthMap[key] || { deliveries: [], total: 0 };
+    const barPct = mData.total > 0 ? Math.max(4, (mData.total / maxMonthTotal) * 100) : 0;
+
+    let rows = '';
+    if (mData.deliveries.length) {
+      // group by project if all projects
+      if (projectVal === 'all') {
+        const byProj = {};
+        mData.deliveries.forEach(d => {
+          const pn = projectMapCache[d.project_id] || 'Unknown';
+          if (!byProj[pn]) byProj[pn] = [];
+          byProj[pn].push(d);
+        });
+        Object.entries(byProj).forEach(([projName, delivs]) => {
+          rows += `<tr style="background:var(--surface2);"><td colspan="4" style="font-size:11px;font-weight:600;color:var(--text-muted);padding:5px 10px;font-family:var(--mono);text-transform:uppercase;">${projName}</td></tr>`;
+          delivs.forEach(d => {
+            rows += `<tr>
+              <td>${fmtDate(d.date)}</td>
+              <td>${d.description}</td>
+              <td><span class="badge ${d.status}" style="font-size:10px;">${d.status==='transit'?'In transit':cap(d.status)}</span></td>
+              <td class="num">${fmtCost(d.cost)}</td>
+            </tr>`;
+          });
+        });
+      } else {
+        mData.deliveries.forEach(d => {
+          rows += `<tr>
+            <td>${fmtDate(d.date)}</td>
+            <td>${d.description}</td>
+            <td><span class="badge ${d.status}" style="font-size:10px;">${d.status==='transit'?'In transit':cap(d.status)}</span></td>
+            <td class="num">${fmtCost(d.cost)}</td>
+          </tr>`;
+        });
+      }
+      rows += `<tr class="subtotal"><td colspan="3">Month total</td><td class="num">${fmtCost(mData.total)}</td></tr>`;
+    }
+
+    bodyHtml += `<div class="forecast-month-block">
+      <div class="forecast-month-label">
+        <span>${MONTHS[mDate.getMonth()]} ${mDate.getFullYear()}</span>
+        <span class="forecast-month-total">${mData.deliveries.length} deliver${mData.deliveries.length!==1?'ies':'y'} · ${fmtCost(mData.total)}</span>
+      </div>
+      <div class="forecast-bar-wrap"><div class="forecast-bar" style="width:${barPct.toFixed(1)}%"></div></div>
+      ${mData.deliveries.length ? `<table class="rep-table">
+        <thead><tr><th>Date</th><th>Description</th><th>Status</th><th class="num">Cost</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : '<div style="font-size:13px;color:var(--text-faint);padding:4px 0 8px;">No deliveries scheduled.</div>'}
+    </div>`;
+  }
+
+  document.getElementById('forecast-body').innerHTML = bodyHtml;
+  document.getElementById('forecast-output').classList.add('visible');
+  document.getElementById('rep-output').classList.remove('visible');
 }
 
 async function generateReport() {
