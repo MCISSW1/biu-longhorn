@@ -186,6 +186,19 @@
     body { background: white; }
     .rep-grand { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
+
+  /* ── Notes ── */
+  .note-delivery-block { margin-bottom: 1.5rem; }
+  .note-delivery-header { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.6rem 1rem; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; cursor: pointer; }
+  .note-delivery-name { font-size: 13px; font-weight: 600; }
+  .note-delivery-meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  .note-entry { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 5px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+  .note-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+  .note-date { font-size: 11px; color: var(--text-faint); font-family: var(--mono); margin-top: 4px; }
+  .note-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .note-add-row { display: flex; gap: 8px; margin-top: 6px; }
+  .note-input { flex: 1; font-family: var(--sans); font-size: 13px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); outline: none; resize: vertical; min-height: 38px; transition: border-color 0.12s; }
+  .note-input:focus { border-color: var(--text); }
   /* modal */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(20,18,14,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
   .modal-backdrop.open { opacity: 1; pointer-events: all; }
@@ -251,6 +264,9 @@
       </button>
       <button class="nav-item" id="nav-reports" onclick="switchTab('reports')">
         <span class="nav-icon">⎙</span> Reports
+      </button>
+      <button class="nav-item" id="nav-notes" onclick="switchTab('notes')">
+        <span class="nav-icon">✎</span> Notes
       </button>
     </nav>
 
@@ -388,6 +404,19 @@
           </div>
           <div id="rep-body"></div>
         </div>
+      </div>
+
+
+      <!-- NOTES -->
+      <div id="screen-notes" class="screen">
+        <div class="page-header">
+          <div><h1>Notes</h1><p>Notes by delivery across all projects</p></div>
+        </div>
+        <div class="exp-project-select" style="margin-bottom:1.5rem;">
+          <label style="font-size:14px;font-weight:500;color:var(--text);font-family:var(--sans);">Project:</label>
+          <select id="notes-project-select" onchange="renderNotes()"></select>
+        </div>
+        <div id="notes-body"><div class="loading-state">Select a project to view notes.</div></div>
       </div>
 
       <!-- DETAIL -->
@@ -557,7 +586,7 @@ function toast(msg, isError) {
 }
 
 // ── Tab switching ──
-const TABS = ['projects','calendar','gantt','alerts','expenses','reports'];
+const TABS = ['projects','calendar','gantt','alerts','expenses','reports','notes'];
 function switchTab(tab) {
   activeTab = tab;
   TABS.forEach(t => {
@@ -572,6 +601,7 @@ function switchTab(tab) {
   else if (tab === 'gantt') renderGantt();
   else if (tab === 'expenses') renderExpenses();
   else if (tab === 'reports') renderReportsTab();
+  else if (tab === 'notes') renderNotes();
   else renderAlerts();
 }
 
@@ -761,6 +791,7 @@ async function renderDetail() {
         <div class="delivery-cost">${fmtCost(d.cost)}</div>
         <div class="delivery-actions">
           <button class="btn-icon" onclick="openDeliveryModal('${d.id}')">✎</button>
+          <button class="btn-icon" title="Notes" onclick="goToDeliveryNotes('${d.id}')">📝</button>
           <button class="btn-icon" onclick="deleteDelivery('${d.id}')" style="color:var(--red-text);">✕</button>
         </div>
       </div>
@@ -1523,6 +1554,144 @@ async function generateReport() {
   `;
 
   document.getElementById('rep-output').classList.add('visible');
+}
+
+
+// ── Notes ──
+let notesProjectId = null;
+
+async function renderNotes() {
+  if (!projectsCache.length) {
+    const { data: projs } = await sb.from('projects').select('*').order('created_at',{ascending:true});
+    projectsCache = projs || [];
+    projs.forEach(p => projectMapCache[p.id] = p.name);
+  }
+  const sel = document.getElementById('notes-project-select');
+  const prevVal = notesProjectId || sel.value;
+  sel.innerHTML = projectsCache.map(p=>`<option value="${p.id}"${p.id===prevVal?' selected':''}>${p.name}</option>`).join('');
+  notesProjectId = sel.value;
+  if (!notesProjectId) { document.getElementById('notes-body').innerHTML = '<div class="empty-state">No projects found.</div>'; return; }
+  await loadAndRenderNotes();
+}
+
+async function loadAndRenderNotes() {
+  const body = document.getElementById('notes-body');
+  body.innerHTML = '<div class="loading-state">Loading…</div>';
+
+  // Fetch deliveries for this project
+  const { data: deliveries } = await sb.from('deliveries').select('*').eq('project_id', notesProjectId).order('date',{ascending:true});
+  if (!deliveries || !deliveries.length) {
+    body.innerHTML = '<div class="empty-state">No deliveries for this project yet.</div>';
+    return;
+  }
+
+  // Fetch all notes for these deliveries
+  const delivIds = deliveries.map(d => d.id);
+  const { data: notes } = await sb.from('delivery_notes').select('*').in('delivery_id', delivIds).order('created_at',{ascending:true});
+  const notesMap = {};
+  (notes||[]).forEach(n => {
+    if (!notesMap[n.delivery_id]) notesMap[n.delivery_id] = [];
+    notesMap[n.delivery_id].push(n);
+  });
+
+  body.innerHTML = deliveries.map(d => {
+    const delivNotes = notesMap[d.id] || [];
+    const notesHtml = delivNotes.map(n => `
+      <div class="note-entry" id="note-entry-${n.id}">
+        <div>
+          <div class="note-text">${n.note.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+          <div class="note-date">${new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+        <div class="note-actions">
+          <button class="btn-icon" onclick="editNote('${n.id}','${d.id}')">✎</button>
+          <button class="btn-icon" onclick="deleteNote('${n.id}')" style="color:var(--red-text);">✕</button>
+        </div>
+      </div>`).join('');
+
+    return `<div class="note-delivery-block">
+      <div class="note-delivery-header">
+        <div>
+          <div class="note-delivery-name">${d.description}</div>
+          <div class="note-delivery-meta">${fmtDate(d.date)} · <span class="badge ${d.status}" style="font-size:10px;padding:2px 6px;">${d.status==='transit'?'In transit':cap(d.status)}</span></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);">${delivNotes.length} note${delivNotes.length!==1?'s':''}</div>
+      </div>
+      ${notesHtml}
+      <div class="note-add-row">
+        <textarea class="note-input" id="note-input-${d.id}" placeholder="Add a note…" rows="2"></textarea>
+        <button class="btn primary" onclick="addNote('${d.id}')">Add</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addNote(deliveryId) {
+  const input = document.getElementById(`note-input-${deliveryId}`);
+  const note = input.value.trim();
+  if (!note) { input.focus(); return; }
+  const { error } = await sb.from('delivery_notes').insert({ delivery_id: deliveryId, note });
+  if (error) { toast('Error saving note', true); return; }
+  input.value = '';
+  toast('Note added');
+  await loadAndRenderNotes();
+}
+
+async function deleteNote(noteId) {
+  if (!confirm('Delete this note?')) return;
+  const { error } = await sb.from('delivery_notes').delete().eq('id', noteId);
+  if (error) { toast('Error deleting note', true); return; }
+  toast('Note deleted');
+  await loadAndRenderNotes();
+}
+
+async function editNote(noteId, deliveryId) {
+  const entryEl = document.getElementById(`note-entry-${noteId}`);
+  const textEl = entryEl.querySelector('.note-text');
+  const current = textEl.textContent;
+  const textarea = document.createElement('textarea');
+  textarea.className = 'note-input';
+  textarea.value = current;
+  textarea.rows = 3;
+  textarea.style.marginBottom = '6px';
+  textEl.replaceWith(textarea);
+  textarea.focus();
+
+  // Replace edit button with save
+  const actionsEl = entryEl.querySelector('.note-actions');
+  actionsEl.innerHTML = `<button class="btn primary" style="font-size:12px;padding:5px 10px;" onclick="saveEditNote('${noteId}', this)">Save</button>`;
+}
+
+async function saveEditNote(noteId, btn) {
+  const entryEl = document.getElementById(`note-entry-${noteId}`);
+  const textarea = entryEl.querySelector('textarea');
+  const note = textarea.value.trim();
+  if (!note) { textarea.focus(); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await sb.from('delivery_notes').update({ note }).eq('id', noteId);
+  if (error) { toast('Error saving note', true); btn.disabled=false; btn.textContent='Save'; return; }
+  toast('Note updated');
+  await loadAndRenderNotes();
+}
+
+async function goToDeliveryNotes(deliveryId) {
+  // find the project for this delivery
+  const delivery = deliveriesCache.find(d => d.id === deliveryId);
+  if (!delivery) return;
+  notesProjectId = delivery.project_id;
+  previousTab = activeTab;
+  activeTab = 'notes';
+  TABS.forEach(t => document.getElementById('screen-'+t).classList.remove('active'));
+  TABS.forEach(t => document.getElementById('nav-'+t).classList.remove('active'));
+  document.getElementById('screen-detail').classList.remove('active');
+  document.getElementById('screen-notes').classList.add('active');
+  document.getElementById('nav-notes').classList.add('active');
+  await renderNotes();
+  // scroll to the delivery
+  setTimeout(() => {
+    const blocks = document.querySelectorAll('.note-delivery-block');
+    const delivIndex = deliveriesCache.findIndex(d => d.id === deliveryId);
+    if (blocks[delivIndex]) blocks[delivIndex].scrollIntoView({behavior:'smooth', block:'start'});
+  }, 300);
 }
 
 const PASS_KEY = 'dt_auth';
